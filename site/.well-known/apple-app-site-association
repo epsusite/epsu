@@ -1,0 +1,26 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appIDs": [
+          "REPLACE_WITH_APPLE_TEAM_ID.com.jtruu.epsu"
+        ],
+        "components": [
+          {
+            "/": "/auth/confirm/*"
+          },
+          {
+            "/": "/reset-password/*"
+          },
+          {
+            "/": "/join/*"
+          },
+          {
+            "/": "/mod/*"
+          }
+        ]
+      }
+    ]
+  }
+}

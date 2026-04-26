@@ -11,4 +11,11 @@ Use this folder as the Render static site publish root.
 - `/terms`
 - `/guidelines`
 - `/privacy`
+- `/delete-account`
 - `/whitepaper`
+- `/auth/confirm/`
+- `/reset-password/`
+- `/auth-confirm.html`
+- `/reset-password.html`
+- `/.well-known/assetlinks.json`
+- `/.well-known/apple-app-site-association`
