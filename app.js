@@ -122,9 +122,9 @@ function IntroBurgerScreen({ navigation }) {
       subtitle=""
       imageSource={require('./assets/images/1774535505571.jpg')}
       sections={[
-        { label: 'What is this', answer: "Anonymous local Epsu's for your school and regions" },
-        { label: 'Who is this for', answer: 'People who want honest local conversations' },
-        { label: 'Why use this', answer: 'To talk without fear of discrimination or hate' },
+        { label: 'What is this?', answer: 'Epsus are anonymous local communities for schools and regions' },
+        { label: 'Who is this for?', answer: 'People who want honest local conversations' },
+        { label: 'Why use this?', answer: 'To talk without fear of discrimination or hate' },
       ]}
       primaryLabel="Continue"
       onPrimaryPress={() => navigation.navigate('IntroPizza')}
