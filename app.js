@@ -69,52 +69,6 @@ const PENDING_MOD_INVITE_STORAGE_KEY = 'epsu_pending_mod_invite_token';
 const INTRO_COMPLETED_STORAGE_KEY = 'has_completed_intro_v1';
 const FEED_REFRESH_FALLBACK_MS = 60000;
 
-function IntroInfoScreen({
-  title,
-  subtitle,
-  sections,
-  primaryLabel,
-  onPrimaryPress,
-  secondaryLabel,
-  onSecondaryPress,
-  imageSource,
-}) {
-  return (
-    <ImageBackground
-      source={imageSource}
-      style={introStyles.background}
-      resizeMode="cover"
-    >
-      <View style={introStyles.overlay}>
-        <View style={introStyles.card}>
-          <Text style={introStyles.title}>{title}</Text>
-          <Text style={introStyles.subtitle}>{subtitle}</Text>
-
-            <Text style={introStyles.sectionLabel}>Ingredients</Text>
-            {ingredients.map((item) => (
-              <Text key={item} style={introStyles.recipeLine}>• {item}</Text>
-            ))}
-
-            <Text style={[introStyles.sectionLabel, introStyles.stepsLabel]}>Steps</Text>
-            {steps.map((item, index) => (
-              <Text key={item} style={introStyles.recipeLine}>{index + 1}. {item}</Text>
-            ))}
-          <View style={introStyles.buttonRow}>
-            {secondaryLabel ? (
-              <Pressable style={[introStyles.button, introStyles.secondaryButton]} onPress={onSecondaryPress}>
-                <Text style={[introStyles.buttonText, introStyles.secondaryButtonText]}>{secondaryLabel}</Text>
-              </Pressable>
-            ) : null}
-            <Pressable style={introStyles.button} onPress={onPrimaryPress}>
-              <Text style={introStyles.buttonText}>{primaryLabel}</Text>
-            </Pressable>
-          </View>
-        </View>
-      </View>
-    </ImageBackground>
-  );
-}
-
 function IntroBurgerScreen({ navigation }) {
   return (
     <IntroOnboardingScreen
