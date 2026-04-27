@@ -4,12 +4,21 @@
     "slug": "epsu",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/1000133096.png",
     "scheme": "epsu",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.jtruu.epsu",
+      "associatedDomains": [
+        "applinks:epsu.site"
+      ],
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSUserNotificationsUsageDescription": "Epsu uses notifications for moderation results and important community updates.",
+        "NSPhotoLibraryUsageDescription": "Epsu only accesses your photo library if you choose a school logo to upload."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -18,9 +27,45 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
+      "googleServicesFile": "./google-services.json",
+      "softwareKeyboardLayoutMode": "pan",
       "edgeToEdgeEnabled": false,
       "predictiveBackGestureEnabled": false,
-      "package": "com.jtruu.epsu"
+      "package": "com.jtruu.epsu",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "epsu.site",
+              "pathPrefix": "/auth/confirm"
+            },
+            {
+              "scheme": "https",
+              "host": "epsu.site",
+              "pathPrefix": "/reset-password"
+            },
+            {
+              "scheme": "https",
+              "host": "epsu.site",
+              "pathPrefix": "/join"
+            },
+            {
+              "scheme": "https",
+              "host": "epsu.site",
+              "pathPrefix": "/mod"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ],
+      "permissions": [
+        ]
     },
     "androidNavigationBar": {
       "backgroundColor": "#e52b50",
@@ -28,18 +73,36 @@
     },
     "web": {
       "output": "single",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/1000133096.png"
     },
     "plugins": [
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Epsu only accesses your photo library if you choose a school logo to upload."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/android-icon-monochrome.png",
+          "color": "#e52b50",
+          "defaultChannel": "default",
+          "sounds": [
+            "./assets/notifications/epsu_notification.wav"
+          ],
+          "enableBackgroundRemoteNotifications": false
+        }
+      ],
+      [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/1000133096.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
+          "backgroundColor": "#e52b50",
           "dark": {
-            "backgroundColor": "#000000"
+            "backgroundColor": "#e52b50"
           }
         }
       ]
@@ -50,8 +113,15 @@
     },
     "extra": {
       "eas": {
-        "projectId": "94ce67b2-41e1-4100-b95b-a6438be99da5"
+        "projectId": "f3688a2c-ce49-44d5-8b18-1de2bb864231"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "owner": "epsusite",
+    "updates": {
+      "url": "https://u.expo.dev/f3688a2c-ce49-44d5-8b18-1de2bb864231"
     }
   }
 }

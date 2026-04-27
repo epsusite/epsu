@@ -6,14 +6,10 @@
    - `EXPO_PUBLIC_SUPABASE_URL`
    - `EXPO_PUBLIC_SUPABASE_ANON_KEY`
 4. In the Supabase SQL editor, run [`schema.sql`](C:/Users/jtruu/epsu/supabase/schema.sql).
+5. Then run the files in [`migrations/`](C:/Users/jtruu/epsu/supabase/migrations) in timestamp order.
 
-Current schema covers:
-- profiles
-- epsus
-- epsu memberships
-- posts
-- post reactions
-- post reports
-- epsu subscriptions
-
-This matches the app's current concepts so we can move off local-only state incrementally instead of rewriting the product model.
+Notes:
+- `schema.sql` is the current bootstrap snapshot for the public tables.
+- The real policies, triggers, RPCs, and later behavior changes are defined in the timestamped files in `migrations/`.
+- `migrations_legacy/` contains older non-timestamped files kept only for historical reference.
+- `manual-sql/` is legacy and should not be treated as the source of truth for a fresh setup.

@@ -3,13 +3,15 @@ import {
   View,
   Text,
   TextInput,
-  TouchableOpacity,
   StyleSheet,
   ImageBackground,
   KeyboardAvoidingView,
   Platform,
   StatusBar,
 } from 'react-native';
+import { TouchableOpacity } from 'react-native-gesture-handler';
+
+const MAX_PASSWORD_LENGTH = 64;
 
 export default function LoginScreen({ navigation, onLogin }) {
   const [email, setEmail] = useState('');
@@ -21,17 +23,17 @@ export default function LoginScreen({ navigation, onLogin }) {
     let valid = true;
 
     if (!email.trim()) {
-      setEmailError('Email is required.');
+      setEmailError('Email is required');
       valid = false;
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      setEmailError('Enter a valid email address.');
+      setEmailError('Enter a valid email address');
       valid = false;
     } else {
       setEmailError('');
     }
 
     if (!password) {
-      setPasswordError('Password is required.');
+      setPasswordError('Password is required');
       valid = false;
     } else {
       setPasswordError('');
@@ -91,9 +93,9 @@ export default function LoginScreen({ navigation, onLogin }) {
                 }}
                 onBlur={() => {
                   if (!email.trim()) {
-                    setEmailError('Email is required.');
+                    setEmailError('Email is required');
                   } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-                    setEmailError('Enter a valid email address.');
+                    setEmailError('Enter a valid email address');
                   }
                 }}
               />
@@ -106,13 +108,14 @@ export default function LoginScreen({ navigation, onLogin }) {
                 placeholder="Password"
                 placeholderTextColor="rgba(255,255,255,0.6)"
                 secureTextEntry
+                maxLength={MAX_PASSWORD_LENGTH}
                 value={password}
                 onChangeText={(val) => {
                   setPassword(val);
                   if (passwordError) setPasswordError('');
                 }}
                 onBlur={() => {
-                  if (!password) setPasswordError('Password is required.');
+                  if (!password) setPasswordError('Password is required');
                 }}
               />
               {passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
@@ -124,6 +127,13 @@ export default function LoginScreen({ navigation, onLogin }) {
 
             <TouchableOpacity
               style={styles.linkWrapper}
+              onPress={() => navigation.navigate('ForgotPassword', { email: email.trim() })}
+            >
+              <Text style={styles.linkText}>Forgot password?</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.secondaryLinkWrapper}
               onPress={() => navigation.navigate('SignUp')}
             >
               <Text style={styles.linkText}>Create account</Text>
@@ -138,7 +148,7 @@ export default function LoginScreen({ navigation, onLogin }) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#e52b50' },
   bg: { flex: 1 },
-  overlay: { flex: 1, justifyContent: 'center' },
+  overlay: { flex: 1, justifyContent: 'flex-end', paddingBottom: 36 },
   inner: { marginHorizontal: 28 },
   title: {
     fontSize: 36,
@@ -150,7 +160,7 @@ const styles = StyleSheet.create({
   fieldWrapper: { marginBottom: 16 },
   input: {
     backgroundColor: '#e52b50',
-    borderRadius: 10,
+    borderRadius: 16,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
@@ -171,7 +181,7 @@ const styles = StyleSheet.create({
   },
   button: {
     backgroundColor: '#e52b50',
-    borderRadius: 10,
+    borderRadius: 16,
     paddingVertical: 15,
     alignItems: 'center',
     marginTop: 8,
@@ -190,6 +200,20 @@ const styles = StyleSheet.create({
   linkWrapper: {
     alignItems: 'center',
     marginTop: 20,
+    alignSelf: 'center',
+    backgroundColor: '#e52b50',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  secondaryLinkWrapper: {
+    alignItems: 'center',
+    marginTop: 14,
+    alignSelf: 'center',
+    backgroundColor: '#e52b50',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
   },
   linkText: {
     color: '#fff',

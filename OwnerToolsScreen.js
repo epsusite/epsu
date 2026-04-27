@@ -1,5 +1,7 @@
 import React, { useMemo } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from 'react-native-gesture-handler';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 function ToolCard({ title, meta, onPress, destructive = false }) {
   return (
@@ -14,19 +16,40 @@ function ToolCard({ title, meta, onPress, destructive = false }) {
   );
 }
 
-export default function OwnerToolsScreen({ navigation, route, epsus, memberships }) {
+export default function OwnerToolsScreen({
+  navigation,
+  route,
+  epsus,
+  memberships,
+  currentUserId,
+  currentIsAdmin = false,
+}) {
+  const insets = useSafeAreaInsets();
   const epsuId = route?.params?.epsuId ?? null;
   const epsu = epsus.find((item) => item.id === epsuId) ?? null;
   const filteredMemberships = useMemo(
     () => memberships.filter((item) => item.epsuId === epsuId),
     [epsuId, memberships]
   );
-  const moderatorCount = filteredMemberships.filter((item) => item.role === 'moderator').length;
+  const moderatorCount = useMemo(() => {
+    const moderatorProfileIds = new Set(
+      filteredMemberships
+        .filter((item) => item.status === 'active' && ['host', 'moderator'].includes(item.role))
+        .map((item) => item.profileId)
+        .filter(Boolean)
+    );
+
+    if (currentIsAdmin && currentUserId) {
+      moderatorProfileIds.add(currentUserId);
+    }
+
+    return moderatorProfileIds.size;
+  }, [currentIsAdmin, currentUserId, filteredMemberships]);
 
   return (
     <View style={styles.screen}>
-      <View style={styles.content}>
-        <Text style={styles.sectionEyebrow}>Owner tools</Text>
+      <View style={[styles.content, { paddingTop: insets.top + 12 }]}>
+        <Text style={styles.sectionEyebrow}>Host tools</Text>
         <Text style={styles.sectionTitle}>{epsu?.name ?? 'Epsu'}</Text>
 
         <View style={styles.toolList}>
@@ -36,18 +59,13 @@ export default function OwnerToolsScreen({ navigation, route, epsus, memberships
             onPress={() => navigation.navigate('OwnerTeam', { epsuId })}
           />
           <ToolCard
-            title="Access and invite"
-            meta="First link, join entry and QR later"
-            onPress={() => navigation.navigate('OwnerAccess', { epsuId })}
-          />
-          <ToolCard
             title="Worst users"
-            meta="By posts removed by mods"
+            meta="By reports from different people"
             onPress={() => navigation.navigate('OwnerWorstUsers', { epsuId })}
           />
           <ToolCard
             title="Delete Epsu"
-            meta="Permanent and owner-only"
+            meta="Permanent and host-only"
             onPress={() => navigation.navigate('DeleteEpsu', { epsuId })}
             destructive
           />
@@ -65,7 +83,6 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: 18,
-    paddingTop: 20,
   },
   sectionEyebrow: {
     fontSize: 13,

@@ -1,18 +1,23 @@
 import React, { useEffect, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { fetchWorstUsers } from './lib/epsuApi';
+import { fetchWorstUsers } from './lib/api/moderation';
 
 function WorstUserCard({ item }) {
   return (
     <View style={styles.card}>
       <Text style={styles.cardTitle}>{item.label}</Text>
-      <Text style={styles.cardMeta}>{item.removedCount} posts removed by mods</Text>
+      <Text style={styles.cardMeta}>
+        {item.totalReports} reports from {item.distinctReporterCount} people across {item.reportedPostCount}{' '}
+        posts
+      </Text>
     </View>
   );
 }
 
 export default function OwnerWorstUsersScreen({ route, epsus }) {
+  const insets = useSafeAreaInsets();
   const epsuId = route?.params?.epsuId ?? null;
   const epsu = epsus.find((item) => item.id === epsuId) ?? null;
   const [worstUsers, setWorstUsers] = useState([]);
@@ -39,7 +44,7 @@ export default function OwnerWorstUsersScreen({ route, epsus }) {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.content}>
+      <View style={[styles.content, { paddingTop: insets.top + 12 }]}>
         <Text style={styles.sectionEyebrow}>Worst users</Text>
         <Text style={styles.sectionTitle}>{epsu?.name ?? 'Epsu'}</Text>
         <FlatList
@@ -49,8 +54,8 @@ export default function OwnerWorstUsersScreen({ route, epsus }) {
           renderItem={({ item }) => <WorstUserCard item={item} />}
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <Text style={styles.emptyTitle}>No bad actors yet</Text>
-              <Text style={styles.emptyText}>Nobody here has stacked up removed posts yet</Text>
+              <Text style={styles.emptyTitle}>No worst users yet</Text>
+              <Text style={styles.emptyText}>Nobody here has enough reports from different people yet</Text>
             </View>
           }
         />
@@ -67,7 +72,6 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: 18,
-    paddingTop: 20,
   },
   sectionEyebrow: {
     fontSize: 13,

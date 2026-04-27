@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Epsu Join Invite</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="page doc">
+      <header class="doc-header">
+        <p class="eyebrow">Invite</p>
+        <h1 class="doc-title">Join this Epsu</h1>
+        <p class="doc-body">Open the Epsu app and paste this full link into the Home screen invite flow.</p>
+      </header>
+      <section class="doc-section">
+        <h2>Invite link</h2>
+        <p id="invite-link" class="doc-body"></p>
+      </section>
+      <a class="back-link" href="/">Back to Epsu</a>
+    </main>
+    <script>
+      document.getElementById('invite-link').textContent = window.location.href;
+    </script>
+  </body>
+  </html>

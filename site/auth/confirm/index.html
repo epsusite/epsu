@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Epsu Email Confirmation</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-auth-action="confirm">
+    <main class="page doc">
+      <header class="doc-header">
+        <p class="eyebrow">Account</p>
+        <h1 id="status-title" class="doc-title">Finishing confirmation</h1>
+        <p id="status-body" class="doc-body">
+          Please wait while we hand this link off to Epsu.
+        </p>
+      </header>
+      <section class="doc-section status-card">
+        <p id="status-note" class="doc-body">
+          If nothing happens, use the button below to open the app on this device.
+        </p>
+        <div class="status-actions">
+          <a id="open-app-link" class="button-link" href="epsu://auth/confirm">Open Epsu</a>
+          <a class="back-link" href="/">Back to Epsu</a>
+        </div>
+      </section>
+    </main>
+    <script src="/auth-bridge.js"></script>
+  </body>
+  </html>

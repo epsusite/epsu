@@ -1,84 +1,188 @@
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
   ImageBackground,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
+  ScrollView,
   StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
+import { TouchableOpacity } from 'react-native-gesture-handler';
+import * as WebBrowser from 'expo-web-browser';
+import CountryPickerModal from './components/CountryPickerModal';
+import { showAppDialog } from './components/AppDialog';
+import { findCountryByCode } from './lib/countries';
+import { isValidCountryCode, normalizeCountryCode } from './lib/countryCode';
+
+const TERMS_URL = 'https://epsu.site/terms';
+const PRIVACY_URL = 'https://epsu.site/privacy';
+const MIN_PASSWORD_LENGTH = 8;
+const MAX_PASSWORD_LENGTH = 64;
+
+function CheckboxRow({ checked, children, onPress }) {
+  return (
+    <Pressable style={styles.checkboxRow} onPress={onPress}>
+      <View style={[styles.checkboxBox, checked && styles.checkboxBoxChecked]}>
+        {checked ? <Text style={styles.checkboxTick}>✓</Text> : null}
+      </View>
+      <Text style={styles.checkboxText}>{children}</Text>
+    </Pressable>
+  );
+}
 
 export default function SignUpScreen({ navigation, onSignUp }) {
-  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [usernameError, setUsernameError] = useState('');
+  const [countryCode, setCountryCode] = useState('');
+  const [isCountryPickerVisible, setIsCountryPickerVisible] = useState(false);
+  const [isThirteenOrOlder, setIsThirteenOrOlder] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [countryError, setCountryError] = useState('');
+  const [ageError, setAgeError] = useState('');
+  const [termsError, setTermsError] = useState('');
+  const [generalError, setGeneralError] = useState('');
+  const [pendingConfirmationEmail, setPendingConfirmationEmail] = useState('');
 
   const getPasswordStrength = () => {
     if (password.length === 0) return null;
-    if (password.length < 8) return { label: 'Too short', color: '#ff6b6b', width: '30%' };
+    if (password.length < MIN_PASSWORD_LENGTH) return { label: 'Too short', color: '#ff6b6b', width: '30%' };
     if (password.length < 12) return { label: 'Fair', color: '#ffd93d', width: '60%' };
     return { label: 'Strong', color: '#6bcb77', width: '100%' };
   };
 
   const strength = getPasswordStrength();
 
-  const validateUsername = (val) => {
-    if (!val.trim()) return 'Username is required.';
-    if (val.trim().length < 8) return 'Username must be at least 8 characters.';
-    return '';
+  const sanitizeSignUpMessage = (message) => {
+    const lowerMessage = message?.toLowerCase?.() ?? '';
+
+    if (
+      lowerMessage.includes('saving the profile record failed') ||
+      (lowerMessage.includes('row-level security policy') && lowerMessage.includes('profiles'))
+    ) {
+      return 'Your account may already have been created. Check your email for a confirmation link before trying again.';
+    }
+
+    return message;
   };
 
   const validatePassword = (val) => {
-    if (!val) return 'Password is required.';
-    if (val.length < 8) return 'Password must be at least 8 characters.';
-    return '';
-  };
-
-  const validateEmail = (val) => {
-    const normalized = val.trim();
-    if (!normalized) return 'Email is required.';
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
-      return 'Enter a valid email address.';
+    if (!val) return 'Password is required';
+    if (val.length < MIN_PASSWORD_LENGTH) {
+      return `Password must be at least ${MIN_PASSWORD_LENGTH} characters`;
+    }
+    if (val.length > MAX_PASSWORD_LENGTH) {
+      return `Password must be ${MAX_PASSWORD_LENGTH} characters or fewer`;
     }
     return '';
   };
 
+  const validateCountryCode = (val) => {
+    const normalized = normalizeCountryCode(val);
+    if (!normalized) {
+      return 'Country is required';
+    }
+
+    if (!isValidCountryCode(normalized)) {
+      return 'Use a 2-letter country code like EE or US';
+    }
+
+    return '';
+  };
+
+  const validateAgeConfirmation = (checked) => (checked ? '' : 'You must confirm that you are 13 or older');
+
+  const validateEmail = (val) => {
+    const normalized = val.trim();
+    if (!normalized) return 'Email is required';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+      return 'Enter a valid email address';
+    }
+    return '';
+  };
+
+  const validateTerms = (checked) => {
+    if (!checked) {
+      return 'You must agree to the Terms of Service and Privacy Policy';
+    }
+    return '';
+  };
+
+  const openDocument = async (url) => {
+    await WebBrowser.openBrowserAsync(url);
+  };
+
   const handleSignUp = async () => {
-    const uErr = validateUsername(username);
+    const normalizedEmail = email.trim().toLowerCase();
     const eErr = validateEmail(email);
     const pErr = validatePassword(password);
-    setUsernameError(uErr);
+    const cErr = validateCountryCode(countryCode);
+    const aErr = validateAgeConfirmation(isThirteenOrOlder);
+    const tErr = validateTerms(acceptedTerms);
     setEmailError(eErr);
     setPasswordError(pErr);
-    if (uErr || eErr || pErr) return;
+    setCountryError(cErr);
+    setAgeError(aErr);
+    setTermsError(tErr);
+    setGeneralError('');
+
+    if (eErr || pErr || cErr || aErr || tErr) return;
 
     const result = await onSignUp({
-      username,
-      email,
+      email: normalizedEmail,
       password,
+      countryCode: normalizeCountryCode(countryCode),
+      isThirteenOrOlder,
+      acceptedTerms,
     });
+
+    const sanitizedMessage = sanitizeSignUpMessage(result?.message);
+
+    if (result.requiresConfirmation) {
+      setPendingConfirmationEmail(normalizedEmail);
+      setGeneralError('');
+      showAppDialog(
+        'Success! Check your email',
+        `We sent a confirmation link to ${normalizedEmail}`
+      );
+      return;
+    }
 
     if (result.ok) {
       return;
     }
 
-    if (result.field === 'username') {
-      setUsernameError(result.message);
-    }
-
     if (result.field === 'email') {
-      setEmailError(result.message);
+      setEmailError(sanitizedMessage);
+      return;
     }
 
     if (result.field === 'password') {
-      setPasswordError(result.message);
+      setPasswordError(sanitizedMessage);
+      return;
     }
+
+    if (result.field === 'countryCode') {
+      setCountryError(sanitizedMessage);
+      return;
+    }
+
+    if (result.field === 'ageConfirmation') {
+      setAgeError(sanitizedMessage);
+      return;
+    }
+
+    if (result.field === 'terms') {
+      setTermsError(sanitizedMessage);
+      return;
+    }
+
+    setGeneralError(sanitizedMessage ?? 'Unable to create account');
   };
 
   return (
@@ -93,92 +197,161 @@ export default function SignUpScreen({ navigation, onSignUp }) {
           style={styles.overlay}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-          <View style={styles.inner}>
-            <Text style={styles.title}>Create account</Text>
-
-            {/* Username */}
-            <View style={styles.fieldWrapper}>
-              <TextInput
-                style={styles.input}
-                placeholder="Username (min. 8 characters)"
-                placeholderTextColor="rgba(255,255,255,0.6)"
-                autoCapitalize="none"
-                autoCorrect={false}
-                value={username}
-                onChangeText={(val) => {
-                  setUsername(val);
-                  if (usernameError) setUsernameError(validateUsername(val));
-                }}
-                onBlur={() => setUsernameError(validateUsername(username))}
-              />
-              {usernameError ? <Text style={styles.errorText}>{usernameError}</Text> : null}
-            </View>
-
-            <View style={styles.fieldWrapper}>
-              <TextInput
-                style={styles.input}
-                placeholder="Email"
-                placeholderTextColor="rgba(255,255,255,0.6)"
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="email-address"
-                value={email}
-                onChangeText={(val) => {
-                  setEmail(val);
-                  if (emailError) setEmailError(validateEmail(val));
-                }}
-                onBlur={() => setEmailError(validateEmail(email))}
-              />
-              {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
-            </View>
-
-            {/* Password */}
-            <View style={styles.fieldWrapper}>
-              <TextInput
-                style={styles.input}
-                placeholder="Password (min. 8 characters)"
-                placeholderTextColor="rgba(255,255,255,0.6)"
-                secureTextEntry
-                value={password}
-                onChangeText={(val) => {
-                  setPassword(val);
-                  if (passwordError) setPasswordError(validatePassword(val));
-                }}
-                onBlur={() => {
-                  setPasswordError(validatePassword(password));
-                }}
-              />
-              {password.length > 0 && (
-                <View style={styles.strengthWrapper}>
-                  <View style={styles.strengthBarBg}>
-                    <View
-                      style={[
-                        styles.strengthBarFill,
-                        { width: strength?.width, backgroundColor: strength?.color },
-                      ]}
-                    />
-                  </View>
-                  <Text style={[styles.strengthLabel, { color: strength?.color }]}>
-                    {strength?.label}
+          <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="always">
+            <View style={styles.inner}>
+              {pendingConfirmationEmail ? (
+                <>
+                  <Text style={styles.title}>Confirm your email</Text>
+                  <Text style={styles.confirmationText}>
+                    Confirmation email sent to you! Open it on your phone to instantly log in, otherwise you must log in separately to Epsu
                   </Text>
-                </View>
+                  <TouchableOpacity
+                    style={styles.button}
+                    onPress={() => navigation.navigate('Login')}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.buttonText}>Back to login</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.title}>Create account</Text>
+
+                  <View style={styles.fieldWrapper}>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Email"
+                      placeholderTextColor="rgba(255,255,255,0.6)"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      keyboardType="email-address"
+                      value={email}
+                      onChangeText={(val) => {
+                        setEmail(val);
+                        if (emailError) setEmailError(validateEmail(val));
+                      }}
+                      onBlur={() => setEmailError(validateEmail(email))}
+                    />
+                    {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
+                  </View>
+
+                  <View style={styles.fieldWrapper}>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Password (8-64 characters)"
+                      placeholderTextColor="rgba(255,255,255,0.6)"
+                      secureTextEntry
+                      maxLength={MAX_PASSWORD_LENGTH}
+                      value={password}
+                      onChangeText={(val) => {
+                        setPassword(val);
+                        if (passwordError) setPasswordError(validatePassword(val));
+                      }}
+                      onBlur={() => {
+                        setPasswordError(validatePassword(password));
+                      }}
+                    />
+                    {password.length > 0 ? (
+                      <View style={styles.passwordMetaRow}>
+                        <View style={styles.strengthWrapper}>
+                          <View style={styles.strengthBarBg}>
+                            <View
+                              style={[
+                                styles.strengthBarFill,
+                                { width: strength?.width, backgroundColor: strength?.color },
+                              ]}
+                            />
+                          </View>
+                          <Text style={[styles.strengthLabel, { color: strength?.color }]}>
+                            {strength?.label}
+                          </Text>
+                        </View>
+                        <Text style={styles.passwordCount}>{password.length}/{MAX_PASSWORD_LENGTH}</Text>
+                      </View>
+                    ) : null}
+                    {passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
+                  </View>
+
+                  <View style={styles.fieldWrapper}>
+                    <TouchableOpacity
+                      style={styles.input}
+                      onPress={() => setIsCountryPickerVisible(true)}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={countryCode ? styles.inputText : styles.placeholderText}>
+                        {findCountryByCode(countryCode)?.name ?? 'Select country'}
+                      </Text>
+                    </TouchableOpacity>
+                    {countryError ? <Text style={styles.errorText}>{countryError}</Text> : null}
+                  </View>
+
+                  <View style={styles.fieldWrapper}>
+                    <CheckboxRow
+                      checked={isThirteenOrOlder}
+                      onPress={() => {
+                        const nextValue = !isThirteenOrOlder;
+                        setIsThirteenOrOlder(nextValue);
+                        if (ageError) {
+                          setAgeError(validateAgeConfirmation(nextValue));
+                        }
+                      }}
+                    >
+                      I am 13 or older
+                    </CheckboxRow>
+                    {ageError ? <Text style={styles.errorText}>{ageError}</Text> : null}
+                  </View>
+
+                  <View style={styles.fieldWrapper}>
+                    <CheckboxRow
+                      checked={acceptedTerms}
+                      onPress={() => {
+                        const nextValue = !acceptedTerms;
+                        setAcceptedTerms(nextValue);
+                        if (termsError) {
+                          setTermsError(validateTerms(nextValue));
+                        }
+                      }}
+                    >
+                      By continuing, you agree to Epsu&apos;s{' '}
+                      <Text style={styles.inlineLink} onPress={() => openDocument(TERMS_URL)}>
+                        Terms of Service
+                      </Text>{' '}
+                      and confirm that you have read Epsu&apos;s{' '}
+                      <Text style={styles.inlineLink} onPress={() => openDocument(PRIVACY_URL)}>
+                        Privacy Policy
+                      </Text>
+                    </CheckboxRow>
+                    {termsError ? <Text style={styles.errorText}>{termsError}</Text> : null}
+                  </View>
+
+                  {generalError ? <Text style={styles.errorText}>{generalError}</Text> : null}
+
+                  <TouchableOpacity style={styles.button} onPress={handleSignUp} activeOpacity={0.85}>
+                    <Text style={styles.buttonText}>Create account</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.linkWrapper}
+                    onPress={() => navigation.navigate('Login')}
+                  >
+                    <Text style={styles.linkText}>Already have an account?</Text>
+                  </TouchableOpacity>
+                </>
               )}
-              {passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
             </View>
-
-            <TouchableOpacity style={styles.button} onPress={handleSignUp} activeOpacity={0.85}>
-              <Text style={styles.buttonText}>Create account</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.linkWrapper}
-              onPress={() => navigation.navigate('Login')}
-            >
-              <Text style={styles.linkText}>Already have an account?</Text>
-            </TouchableOpacity>
-          </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </ImageBackground>
+      <CountryPickerModal
+        visible={isCountryPickerVisible}
+        selectedCode={countryCode}
+        onClose={() => setIsCountryPickerVisible(false)}
+        onSelect={(country) => {
+          setCountryCode(country.code);
+          setCountryError('');
+          setIsCountryPickerVisible(false);
+        }}
+      />
     </View>
   );
 }
@@ -186,23 +359,94 @@ export default function SignUpScreen({ navigation, onSignUp }) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#e52b50' },
   bg: { flex: 1 },
-  overlay: { flex: 1, justifyContent: 'center' },
+  overlay: { flex: 1 },
+  scrollContent: { flexGrow: 1, justifyContent: 'flex-end', paddingTop: 28, paddingBottom: 36 },
   inner: { marginHorizontal: 28 },
   title: { fontSize: 36, fontWeight: '900', color: '#fff', marginBottom: 32, letterSpacing: -0.5 },
   fieldWrapper: { marginBottom: 16 },
   input: {
     backgroundColor: '#e52b50',
-    borderRadius: 10,
+    borderRadius: 16,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
     color: '#fff',
     fontWeight: '500',
+    justifyContent: 'center',
   },
-  strengthWrapper: { flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 8 },
+  inputText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  placeholderText: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  sectionLabel: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 6,
+  },
+  helperText: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 10,
+  },
+  passwordMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 8,
+  },
+  passwordCount: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  strengthWrapper: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
   strengthBarBg: { flex: 1, height: 4, backgroundColor: 'rgba(255,255,255,0.25)', borderRadius: 2, overflow: 'hidden' },
   strengthBarFill: { height: '100%', borderRadius: 2 },
   strengthLabel: { fontSize: 11, fontWeight: '700', width: 50, textAlign: 'right' },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  checkboxBox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+    flexShrink: 0,
+  },
+  checkboxBoxChecked: {
+    backgroundColor: '#fff',
+  },
+  checkboxTick: {
+    color: '#e52b50',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  checkboxText: {
+    color: '#fff',
+    fontSize: 14,
+    lineHeight: 20,
+    flex: 1,
+    fontWeight: '600',
+  },
+  inlineLink: {
+    textDecorationLine: 'underline',
+    fontWeight: '800',
+  },
   errorText: {
     color: '#fff',
     fontSize: 12,
@@ -217,7 +461,7 @@ const styles = StyleSheet.create({
   },
   button: {
     backgroundColor: '#e52b50',
-    borderRadius: 10,
+    borderRadius: 16,
     paddingVertical: 15,
     alignItems: 'center',
     marginTop: 8,
@@ -231,11 +475,23 @@ const styles = StyleSheet.create({
   linkWrapper: {
     alignItems: 'center',
     marginTop: 20,
+    alignSelf: 'center',
+    backgroundColor: '#e52b50',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
   },
   linkText: {
     color: '#fff',
     fontSize: 15,
     fontWeight: '700',
     textDecorationLine: 'underline',
+  },
+  confirmationText: {
+    color: '#fff',
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: '600',
+    marginBottom: 24,
   },
 });

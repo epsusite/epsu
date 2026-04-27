@@ -1,15 +1,19 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Animated,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
+  View,
 } from 'react-native';
+import { TouchableOpacity } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { showAppDialog } from './components/AppDialog';
+import useSubmitButtonAnimation from './lib/useSubmitButtonAnimation';
 
 function getCounterText(length, minLength, maxLength) {
   if (length < minLength) {
@@ -22,28 +26,36 @@ function getCounterText(length, minLength, maxLength) {
 export default function DeleteEpsuScreen({ navigation, route, onDeleteEpsu, epsus }) {
   const insets = useSafeAreaInsets();
   const [typedName, setTypedName] = useState('');
-  const buttonOpacity = useRef(new Animated.Value(0)).current;
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const epsuId = route?.params?.epsuId ?? null;
   const epsu = useMemo(() => epsus.find((item) => item.id === epsuId) ?? null, [epsuId, epsus]);
   const expectedName = epsu?.name ?? '';
-  const canSubmit = typedName.trim() === expectedName;
-
-  useEffect(() => {
-    Animated.timing(buttonOpacity, {
-      toValue: canSubmit ? 1 : 0,
-      duration: canSubmit ? 2000 : 180,
-      useNativeDriver: true,
-    }).start();
-  }, [buttonOpacity, canSubmit]);
+  const canSubmit = typedName.trim() === expectedName && !isSubmitting;
+  const submitAnimationStyle = useSubmitButtonAnimation(canSubmit);
 
   const handleDelete = async () => {
-    if (!canSubmit || !epsuId) {
+    if (!epsuId) {
+      showAppDialog('Delete Epsu', 'This Epsu could not be found');
       return;
     }
 
-    const result = await onDeleteEpsu(epsuId);
-    if (result?.ok) {
-      navigation.navigate('HomeMain');
+    if (!expectedName || typedName.trim() !== expectedName || isSubmitting) {
+      return;
+    }
+
+    Keyboard.dismiss();
+    setIsSubmitting(true);
+
+    try {
+      const result = await onDeleteEpsu(epsuId);
+      if (result?.ok) {
+        navigation.navigate('HomeMain');
+        return;
+      }
+
+      showAppDialog('Delete Epsu', result?.message ?? 'Could not delete this Epsu');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -52,9 +64,9 @@ export default function DeleteEpsuScreen({ navigation, route, onDeleteEpsu, epsu
       style={styles.screen}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + 12 }]} keyboardShouldPersistTaps="always">
         <Text style={styles.sectionEyebrow}>Epsu deletion</Text>
-        <Text style={styles.sectionTitle}>Are you sure to wish this Epsu?</Text>
+        <Text style={styles.sectionTitle}>Are you sure you want to delete this Epsu?</Text>
 
         <Text style={styles.hint}>
           Type {expectedName || 'this Epsu'} exactly to continue
@@ -82,12 +94,17 @@ export default function DeleteEpsuScreen({ navigation, route, onDeleteEpsu, epsu
           styles.submitWrap,
           {
             paddingBottom: insets.bottom + 16,
-            opacity: buttonOpacity,
           },
+          submitAnimationStyle,
         ]}
       >
-        <TouchableOpacity style={styles.submitButton} onPress={handleDelete} activeOpacity={0.85}>
-          <Text style={styles.submitText}>Delete Epsu</Text>
+        <TouchableOpacity
+          style={[styles.submitButton, !canSubmit && styles.submitButtonDisabled]}
+          onPress={handleDelete}
+          activeOpacity={0.85}
+          disabled={!canSubmit}
+        >
+          <Text style={styles.submitText}>{isSubmitting ? 'Deleting...' : 'Submit'}</Text>
         </TouchableOpacity>
       </Animated.View>
     </KeyboardAvoidingView>
@@ -101,7 +118,6 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 18,
-    paddingTop: 20,
     paddingBottom: 110,
     gap: 18,
   },
@@ -130,7 +146,7 @@ const styles = StyleSheet.create({
     color: '#8a5e70',
   },
   input: {
-    minHeight: 58,
+    minHeight: 56,
     borderRadius: 16,
     backgroundColor: '#fff',
     borderWidth: 1,
@@ -157,6 +173,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.18,
     shadowRadius: 12,
     elevation: 6,
+  },
+  submitButtonDisabled: {
+    backgroundColor: '#b97a8a',
   },
   submitText: {
     color: '#fff',

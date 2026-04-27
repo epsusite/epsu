@@ -2,18 +2,23 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   FlatList,
+  Image as RNImage,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { PanGestureHandler, State } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { showAppDialog } from './components/AppDialog';
 import { getSchoolLogoUrl } from './lib/schoolLogo';
+
+const FEED_INTRO_SEEN_PREFIX = 'epsu_feed_intro_seen_v1:';
+const ANGRY_CAT_IMAGE = require('./assets/images/whyareyoureadingfiles.jpg');
 
 function EpsuCard({ item, onPress, unratedCount, onRentPress, disabled = false }) {
   const unreadLabel = unratedCount > 99 ? 'NEW POSTS 99+' : `NEW POSTS ${unratedCount}`;
@@ -116,13 +121,19 @@ function PostCardSurface({ post, opacity, translateX, swipeRotation, likeOverlay
 
       <Text style={styles.postNumber}>#{post.number}</Text>
       <Text style={styles.postTitle}>{post.title}</Text>
-      <Text style={styles.postBody}>{post.body}</Text>
+      {post.localImageSource ? (
+        <View style={styles.postImageWrap}>
+          <RNImage source={post.localImageSource} style={styles.postImage} resizeMode="cover" />
+        </View>
+      ) : (
+        <Text style={styles.postBody}>{post.body}</Text>
+      )}
       {showSwipeHint ? <Text style={styles.swipeHint}>Swipe right to like, left to dislike</Text> : null}
     </Animated.View>
   );
 }
 
-function ModerationPostCard({ post, replyTargetPost, onReact, onReply, onReport, onBlockAuthor, hasReported, showSwipeHint }) {
+function ModerationPostCard({ post, replyTargetPost, onReact, onReply, onReport, onBlockAuthor, hasReported, showSwipeHint, onIntroDismiss }) {
   const translateX = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(1)).current;
   const isAnimatingRef = useRef(false);
@@ -130,6 +141,7 @@ function ModerationPostCard({ post, replyTargetPost, onReact, onReply, onReport,
   const [isLocked, setIsLocked] = useState(false);
   const [dismissedPostId, setDismissedPostId] = useState(null);
   const hasReplyContext = Boolean(post.replyToPostId && replyTargetPost?.id === post.replyToPostId);
+  const isIntroCard = Boolean(post.isIntroCard);
 
   useEffect(() => {
     translateX.setValue(0);
@@ -175,7 +187,12 @@ function ModerationPostCard({ post, replyTargetPost, onReact, onReply, onReport,
       }),
     ]).start(() => {
       setDismissedPostId(post.id);
-      void Promise.resolve(onReact(side, post)).then((result) => {
+      const actionPromise = isIntroCard ? onIntroDismiss?.(side, post) : onReact(side, post);
+      void Promise.resolve(actionPromise).then((result) => {
+        if (isIntroCard) {
+          return;
+        }
+
         if (result?.ok === false) {
           setDismissedPostId(null);
           translateX.setValue(0);
@@ -229,13 +246,14 @@ function ModerationPostCard({ post, replyTargetPost, onReact, onReply, onReport,
     }
 
     const { translationX, velocityX } = nativeEvent;
+    const disallowLeftSwipe = post.isIntroCard && post.localImageSource;
 
     if (translationX >= swipeThreshold || velocityX >= flingVelocityThreshold) {
       runReaction('like');
       return;
     }
 
-    if (translationX <= -swipeThreshold || velocityX <= -flingVelocityThreshold) {
+    if (!disallowLeftSwipe && (translationX <= -swipeThreshold || velocityX <= -flingVelocityThreshold)) {
       runReaction('dislike');
       return;
     }
@@ -272,29 +290,33 @@ function ModerationPostCard({ post, replyTargetPost, onReact, onReply, onReport,
       </PanGestureHandler>
 
       <View style={styles.actionRow}>
-        <TouchableOpacity
-          style={[styles.actionButton, hasReported && styles.actionButtonDisabled]}
-          onPress={() => onReport(post)}
-          activeOpacity={0.85}
-          disabled={hasReported}
-        >
-          <Text style={styles.actionButtonText}>{hasReported ? 'Already reported' : 'Report'}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => onReply(post)}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.actionButtonText}>Reply</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.actionButton, !post.authorId && styles.actionButtonDisabled]}
-          onPress={() => onBlockAuthor(post)}
-          activeOpacity={0.85}
-          disabled={!post.authorId}
-        >
-          <Text style={styles.actionButtonText}>Block author</Text>
-        </TouchableOpacity>
+        {isIntroCard ? null : (
+          <>
+            <TouchableOpacity
+              style={[styles.actionButton, hasReported && styles.actionButtonDisabled]}
+              onPress={() => onReport(post)}
+              activeOpacity={0.85}
+              disabled={hasReported}
+            >
+              <Text style={styles.actionButtonText}>{hasReported ? 'Already reported' : 'Report'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() => onReply(post)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.actionButtonText}>Reply</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionButton, !post.authorId && styles.actionButtonDisabled]}
+              onPress={() => onBlockAuthor(post)}
+              activeOpacity={0.85}
+              disabled={!post.authorId}
+            >
+              <Text style={styles.actionButtonText}>Block author</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
     </View>
   );
@@ -326,6 +348,7 @@ export default function HomeScreen({
   const [searchQuery, setSearchQuery] = useState('');
   const [epsuCategory, setEpsuCategory] = useState('regional');
   const [currentTime, setCurrentTime] = useState(() => Date.now());
+  const [feedIntroStage, setFeedIntroStage] = useState(null);
   const rentCard = {
     id: 'rent-epsu',
     code: '???',
@@ -381,6 +404,35 @@ export default function HomeScreen({
       clearInterval(interval);
     };
   }, []);
+  useEffect(() => {
+    let isActive = true;
+
+    const loadFeedIntroState = async () => {
+      if (!selectedEpsu?.id) {
+        if (isActive) {
+          setFeedIntroStage(null);
+        }
+        return;
+      }
+
+      try {
+        const storedValue = await AsyncStorage.getItem(`${FEED_INTRO_SEEN_PREFIX}${selectedEpsu.id}`);
+        if (isActive) {
+          setFeedIntroStage(storedValue === 'true' ? null : 'welcome');
+        }
+      } catch {
+        if (isActive) {
+          setFeedIntroStage('welcome');
+        }
+      }
+    };
+
+    void loadFeedIntroState();
+
+    return () => {
+      isActive = false;
+    };
+  }, [selectedEpsu?.id]);
   const unratedCountByEpsu = useMemo(
     () =>
       epsus.reduce((accumulator, epsu) => {
@@ -582,11 +634,64 @@ export default function HomeScreen({
     const reviewedIds = new Set(reviewedPostIdsByEpsu[selectedEpsu.id] ?? []);
     return filteredPosts.filter((post) => !reviewedIds.has(post.id));
   }, [filteredPosts, reviewedPostIdsByEpsu, selectedEpsu]);
-  const currentPost = unratedPosts[0] ?? null;
+  const introPost = useMemo(() => {
+    if (!selectedEpsu || !feedIntroStage) {
+      return null;
+    }
+
+    if (feedIntroStage === 'cat') {
+      return {
+        id: `intro-cat:${selectedEpsu.id}`,
+        epsuId: selectedEpsu.id,
+        authorId: null,
+        number: 0,
+        title: "It's not nice to dislike for no reason",
+        body: '',
+        likeCount: 0,
+        dislikeCount: 0,
+        replyToPostId: null,
+        releaseAt: null,
+        expireAt: null,
+        isIntroCard: true,
+        localImageSource: ANGRY_CAT_IMAGE,
+      };
+    }
+
+    return {
+      id: `intro:${selectedEpsu.id}`,
+      epsuId: selectedEpsu.id,
+      authorId: null,
+      number: 0,
+      title: `Welcome to ${selectedEpsu.name} feed!`,
+      body: 'Swipe this post to see more',
+      likeCount: 0,
+      dislikeCount: 0,
+      replyToPostId: null,
+      releaseAt: null,
+      expireAt: null,
+      isIntroCard: true,
+    };
+  }, [feedIntroStage, selectedEpsu]);
+  const currentPost = introPost ?? unratedPosts[0] ?? null;
   const replyTargetPost =
-    currentPost?.replyToPostId && currentPost.replyToPostId !== currentPost.id
+    !currentPost?.isIntroCard && currentPost?.replyToPostId && currentPost.replyToPostId !== currentPost.id
       ? filteredPosts.find((post) => post.id === currentPost.replyToPostId) ?? null
       : null;
+
+  const handleDismissIntroCard = async (side) => {
+    if (!selectedEpsu?.id) {
+      return { ok: true };
+    }
+
+    if (feedIntroStage === 'welcome' && side === 'dislike') {
+      setFeedIntroStage('cat');
+      return { ok: true };
+    }
+
+    setFeedIntroStage(null);
+    await AsyncStorage.setItem(`${FEED_INTRO_SEEN_PREFIX}${selectedEpsu.id}`, 'true').catch(() => {});
+    return { ok: true };
+  };
 
   const handleReply = (post) => {
     navigation.navigate('Post', {
@@ -766,6 +871,7 @@ export default function HomeScreen({
           showSwipeHint={totalReviewedCount < 5}
           onReact={(reaction, post) => onReactToPost(selectedEpsu.id, post.id, reaction)}
           onBlockAuthor={handleBlockAuthor}
+          onIntroDismiss={handleDismissIntroCard}
           onReport={(post) =>
             navigation.navigate('ReportReason', {
               postId: post.id,
@@ -1093,6 +1199,16 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     color: '#49303a',
     textAlign: 'center',
+  },
+  postImageWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+  },
+  postImage: {
+    width: 220,
+    height: 220,
+    borderRadius: 24,
   },
   swipeHint: {
     marginTop: 16,

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "406666232215",
+    "project_id": "epsu-bd639",
+    "storage_bucket": "epsu-bd639.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:406666232215:android:65189c2e4e3431acfdc4d2",
+        "android_client_info": {
+          "package_name": "com.jtruu.epsu"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCftUjgQggglNxaUtL_uKfwxQ3IpwVtylc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -6,8 +6,46 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "channel": "main",
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://xzgzzuxmtjrppavvynuy.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_Zdk74tVkgkJgBJjEVazaRw_Mlb8le9L"
+      },
       "android": {
         "buildType": "apk"
+      }
+    },
+    "demo": {
+      "distribution": "internal",
+      "channel": "main",
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://xzgzzuxmtjrppavvynuy.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_Zdk74tVkgkJgBJjEVazaRw_Mlb8le9L"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "channel": "preview",
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://xzgzzuxmtjrppavvynuy.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_Zdk74tVkgkJgBJjEVazaRw_Mlb8le9L"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "production": {
+      "distribution": "store",
+      "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://xzgzzuxmtjrppavvynuy.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_Zdk74tVkgkJgBJjEVazaRw_Mlb8le9L"
+      },
+      "android": {
+        "buildType": "app-bundle"
       }
     }
   }
