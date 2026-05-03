@@ -38,7 +38,6 @@ yarn-error.*
 supabase-cli-token.txt
 
 # Secrets - never commit
-google-services.json
 resend-api-key.txt
 *.firebase*
 
