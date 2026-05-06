@@ -5,22 +5,77 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Epsu Moderator Invite</title>
     <link rel="stylesheet" href="/styles.css" />
+    <style>
+      .invite-actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-top: 18px;
+      }
+
+      .invite-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 46px;
+        border-radius: 999px;
+        background: #e52b50;
+        color: #fff;
+        font-weight: 800;
+        text-decoration: none;
+        padding: 0 18px;
+      }
+
+      .invite-button.secondary {
+        background: #fff;
+        color: #e52b50;
+        border: 1px solid #f1b6c2;
+      }
+    </style>
   </head>
   <body>
     <main class="page doc">
       <header class="doc-header">
         <p class="eyebrow">Invite</p>
         <h1 class="doc-title">Moderator access</h1>
-        <p class="doc-body">Open the Epsu app and paste this full link into the Home screen invite flow.</p>
+        <p class="doc-body">Open this invite in Epsu to accept moderator access.</p>
       </header>
       <section class="doc-section">
         <h2>Invite link</h2>
         <p id="invite-link" class="doc-body"></p>
+        <div class="invite-actions">
+          <a id="open-app" class="invite-button" href="/">Open in Epsu</a>
+          <a id="copy-link" class="invite-button secondary" href="/">Copy invite link</a>
+        </div>
       </section>
       <a class="back-link" href="/">Back to Epsu</a>
     </main>
     <script>
-      document.getElementById('invite-link').textContent = window.location.href;
+      const currentUrl = new URL(window.location.href);
+      const token = currentUrl.searchParams.get('token') || '';
+      const appUrl = token ? `epsu://mod-invite/${encodeURIComponent(token)}` : 'epsu://';
+      const inviteLink = document.getElementById('invite-link');
+      const openAppLink = document.getElementById('open-app');
+      const copyLink = document.getElementById('copy-link');
+
+      inviteLink.textContent = window.location.href;
+      openAppLink.href = appUrl;
+
+      copyLink.addEventListener('click', async (event) => {
+        event.preventDefault();
+        try {
+          await navigator.clipboard.writeText(window.location.href);
+          copyLink.textContent = 'Copied';
+        } catch {
+          copyLink.textContent = 'Copy failed';
+        }
+      });
+
+      if (token) {
+        window.setTimeout(() => {
+          window.location.href = appUrl;
+        }, 150);
+      }
     </script>
   </body>
-  </html>
+</html>
