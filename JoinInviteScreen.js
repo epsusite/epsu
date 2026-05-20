@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Animated,
   Keyboard,
@@ -8,26 +8,69 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View,
 } from 'react-native';
 import { TouchableOpacity } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { showAppDialog } from './components/AppDialog';
-import CountryPickerModal from './components/CountryPickerModal';
 import { findCountryByCode } from './lib/countries';
+import { normalizeCountryCode } from './lib/countryCode';
+import { UI } from './lib/uiTheme';
 import useSubmitButtonAnimation from './lib/useSubmitButtonAnimation';
 
-export default function JoinInviteScreen({ navigation, onSubmitEpsuSuggestion }) {
+const DEFAULT_REGIONAL_COUNTRY_CODE = 'EE';
+const REGIONAL_SCOPES = ['city', 'state', 'country'];
+const MIN_REGIONAL_TITLE_LENGTH = 2;
+const MAX_REGIONAL_TITLE_LENGTH = 100;
+
+export default function JoinInviteScreen({
+  navigation,
+  onSubmitEpsuSuggestion,
+  currentCountryCode = null,
+  currentIsAdmin = false,
+  epsus = [],
+  userMemberships = [],
+}) {
   const insets = useSafeAreaInsets();
   const [title, setTitle] = useState('');
-  const [countryCode, setCountryCode] = useState('');
-  const [isCountryPickerVisible, setIsCountryPickerVisible] = useState(false);
+  const resolvedCountryCode = normalizeCountryCode(currentCountryCode) ?? DEFAULT_REGIONAL_COUNTRY_CODE;
+  const [countryCode, setCountryCode] = useState(() => resolvedCountryCode);
   const normalizedTitle = useMemo(() => title.trim(), [title]);
-  const canSubmit = normalizedTitle.length >= 2 && countryCode.length === 2;
+  const approvedRegionalMembershipCount = useMemo(() => {
+    if (currentIsAdmin) {
+      return 0;
+    }
+
+    const membershipByEpsuId = new Map(userMemberships.map((membership) => [membership.epsuId, membership]));
+    return epsus.filter((epsu) => {
+      const membership = membershipByEpsuId.get(epsu.id);
+      return (
+        membership &&
+        ['active', 'muted', 'invited'].includes(membership.status) &&
+        REGIONAL_SCOPES.includes(epsu.scope) &&
+        epsu.review_status === 'approved'
+      );
+    }).length;
+  }, [currentIsAdmin, epsus, userMemberships]);
+  const canSubmit =
+    normalizedTitle.length >= MIN_REGIONAL_TITLE_LENGTH &&
+    normalizedTitle.length <= MAX_REGIONAL_TITLE_LENGTH &&
+    countryCode.length === 2;
   const submitAnimationStyle = useSubmitButtonAnimation(canSubmit);
+
+  useEffect(() => {
+    setCountryCode(resolvedCountryCode);
+  }, [resolvedCountryCode]);
 
   const handleSubmit = async () => {
     if (!canSubmit) {
+      return;
+    }
+
+    if (approvedRegionalMembershipCount >= 1) {
+      showAppDialog(
+        'Maximum regional Epsu limit reached',
+        'You already are a member of maximum amount of regional Epsus. Leave from one in order to create a new Epsu.'
+      );
       return;
     }
 
@@ -37,13 +80,16 @@ export default function JoinInviteScreen({ navigation, onSubmitEpsuSuggestion })
     });
 
     if (!result?.ok) {
-      showAppDialog('Suggestion', result?.message ?? 'Could not save suggestion');
+      showAppDialog('Create regional Epsu', result?.message ?? 'Could not create regional Epsu');
       return;
     }
 
     setTitle('');
-    setCountryCode('');
-    showAppDialog('Suggestion sent', result?.message ?? 'Thanks, we saved your request for a new Epsu');
+    setCountryCode(resolvedCountryCode);
+    showAppDialog(
+      'Regional Epsu created',
+      result?.message ?? 'Saved for review and you will get a notification after Administration approves or rejects it'
+    );
     navigation.navigate('HomeMain');
   };
 
@@ -53,17 +99,17 @@ export default function JoinInviteScreen({ navigation, onSubmitEpsuSuggestion })
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + 12 }]} keyboardShouldPersistTaps="always">
-        <Text style={styles.sectionEyebrow}>Suggest regional Epsu</Text>
-        <Text style={styles.sectionTitle}>Does your region have an Epsu?</Text>
+        <Text style={styles.sectionEyebrow}>Create regional Epsu</Text>
+        <Text style={styles.sectionTitle}>Create a regional Epsu</Text>
         <Text style={styles.helper}>
-          Choose the country, then city, region or country where next regional Epsu should be. This data must be accurate, otherwise this Epsu won&apos;t be created
+          Choose the city, region or country where the next regional Epsu should be. Trial Epsu must get 14 members in 7 days after launch to become permanent
         </Text>
 
         <Text style={styles.inputLabel}>Country</Text>
         <TouchableOpacity
           style={styles.countryButton}
-          onPress={() => setIsCountryPickerVisible(true)}
-          activeOpacity={0.85}
+          disabled
+          activeOpacity={1}
         >
           <Text style={countryCode ? styles.countryButtonText : styles.countryPlaceholder}>
             {findCountryByCode(countryCode)?.name ?? 'Select country'}
@@ -73,24 +119,15 @@ export default function JoinInviteScreen({ navigation, onSubmitEpsuSuggestion })
         <Text style={styles.inputLabel}>Location</Text>
         <TextInput
           style={styles.input}
-          placeholder="Example: London, not london"
+          placeholder="Example: London instead of london"
           placeholderTextColor="#8d6676"
           value={title}
           onChangeText={setTitle}
+          maxLength={MAX_REGIONAL_TITLE_LENGTH}
           autoCapitalize="words"
           autoCorrect={false}
         />
       </ScrollView>
-      <CountryPickerModal
-        visible={isCountryPickerVisible}
-        selectedCode={countryCode}
-        onClose={() => setIsCountryPickerVisible(false)}
-        onSelect={(country) => {
-          setCountryCode(country.code);
-          setIsCountryPickerVisible(false);
-        }}
-      />
-
       <Animated.View
         pointerEvents={canSubmit ? 'auto' : 'none'}
         style={[
@@ -112,76 +149,77 @@ export default function JoinInviteScreen({ navigation, onSubmitEpsuSuggestion })
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#fff8fb',
+    backgroundColor: UI.colors.background,
   },
   content: {
-    paddingHorizontal: 18,
+    paddingHorizontal: UI.spacing.screen,
     paddingBottom: 110,
     gap: 16,
   },
   sectionEyebrow: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#8d6676',
+    color: UI.colors.textSoft,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
   },
   sectionTitle: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '900',
-    color: '#20131a',
+    color: UI.colors.text,
   },
   helper: {
     fontSize: 15,
     lineHeight: 22,
-    color: '#7a5968',
+    color: UI.colors.textMuted,
   },
   inputLabel: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#8d6676',
+    color: UI.colors.textSoft,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
     marginBottom: -8,
   },
   countryButton: {
     minHeight: 56,
-    borderRadius: 16,
-    backgroundColor: '#fff',
+    borderRadius: UI.radius.row,
+    backgroundColor: UI.colors.surface,
     borderWidth: 1,
-    borderColor: '#f3d0dd',
+    borderColor: UI.colors.border,
     paddingHorizontal: 16,
     justifyContent: 'center',
   },
   countryButtonText: {
-    color: '#24171d',
+    color: UI.colors.text,
     fontSize: 16,
     fontWeight: '700',
   },
   countryPlaceholder: {
-    color: '#8d6676',
+    color: UI.colors.textSoft,
     fontSize: 16,
   },
   input: {
     minHeight: 56,
-    borderRadius: 16,
-    backgroundColor: '#fff',
+    borderRadius: UI.radius.row,
+    backgroundColor: UI.colors.surface,
     borderWidth: 1,
-    borderColor: '#f3d0dd',
+    borderColor: UI.colors.border,
     paddingHorizontal: 16,
     paddingVertical: 16,
     fontSize: 16,
-    color: '#24171d',
+    color: UI.colors.text,
   },
   submitWrap: {
     position: 'absolute',
-    left: 18,
-    right: 18,
+    left: UI.spacing.screen,
+    right: UI.spacing.screen,
     bottom: 0,
   },
   submitButton: {
-    backgroundColor: '#e52b50',
-    borderRadius: 16,
+    minHeight: 56,
+    backgroundColor: UI.colors.primary,
+    borderRadius: UI.radius.row,
     paddingVertical: 16,
     alignItems: 'center',
     shadowColor: '#000',
@@ -191,7 +229,7 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   submitText: {
-    color: '#fff',
+    color: UI.colors.surface,
     fontSize: 16,
     fontWeight: '900',
     letterSpacing: 0.4,

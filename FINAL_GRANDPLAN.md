@@ -70,7 +70,6 @@ This document is grounded in these repo sources:
   - `site/privacy.html`
   - `site/guidelines.html`
   - `site/delete-account.html`
-  - `site/whitepaper.html`
   - `site/system-report.html`
   - `site/epsu-master-report.html`
   - `site/styles.css`
@@ -663,7 +662,7 @@ The public site currently serves several roles:
 - landing page
 - legal policy hosting
 - deletion instructions
-- whitepaper and report-style material
+- report-style material
 
 ### 21.1 Main entry
 
@@ -685,11 +684,10 @@ The repo now contains completed public pages for:
 
 These replaced the earlier placeholder legal text problem.
 
-### 21.3 Whitepaper and reports
+### 21.3 Reports
 
 The site also contains:
 
-- `whitepaper.html`
 - `system-report.html`
 - `epsu-master-report.html`
 - `mod.html`
@@ -1293,7 +1291,6 @@ Current store and review support docs include:
 
 Current site files include:
 
-- `whitepaper.html`
 - `terms.html`
 - `system-report.html`
 - `styles.css`

@@ -2,10 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
+import { useFocusEffect } from '@react-navigation/native';
 import { TouchableOpacity } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { showAppDialog } from './components/AppDialog';
 import { findCountryByCode } from './lib/countries';
+import { fetchBackgroundJobHealth } from './lib/api/moderation';
 import { getSchoolLogoUrl } from './lib/schoolLogo';
 import { fetchPendingSchoolEpsus, fetchRegionalEpsuSuggestions } from './lib/schoolApi';
 import { UI } from './lib/uiTheme';
@@ -31,6 +33,7 @@ function PendingSchoolCard({ item, onReview }) {
       <Text style={styles.cardTitle}>{item.name}</Text>
       <Text style={styles.cardBody}>{item.website || 'No website provided'}</Text>
       <Text style={styles.cardMeta}>{item.country_code || 'Unknown country'}</Text>
+      <Text style={styles.cardMeta}>Requests: {Number(item.request_count ?? 1)}</Text>
       <Text style={styles.cardMeta}>Host: {item.host_email ?? 'Unknown'}</Text>
       <View style={styles.actionRow}>
         <TouchableOpacity style={styles.secondaryButton} onPress={() => onReview(item, 'rejected')} activeOpacity={0.85}>
@@ -47,9 +50,10 @@ function PendingSchoolCard({ item, onReview }) {
 function RegionalSuggestionCard({ item, onReview }) {
   return (
     <View style={styles.card}>
-      <Text style={styles.cardTitle}>{item.title}</Text>
+      <Text style={styles.cardTitle}>{item.name}</Text>
       <Text style={styles.cardMeta}>{findCountryByCode(item.country_code)?.name ?? item.country_code ?? 'Unknown country'}</Text>
-      <Text style={styles.cardMeta}>{item.vote_count} request{item.vote_count === 1 ? '' : 's'}</Text>
+      <Text style={styles.cardMeta}>Requests: {Number(item.request_count ?? 1)}</Text>
+      <Text style={styles.cardMeta}>Host: {item.host_email ?? 'Unknown'}</Text>
       <View style={styles.actionRow}>
         <TouchableOpacity style={styles.secondaryButton} onPress={() => onReview(item, 'rejected')} activeOpacity={0.85}>
           <Text style={styles.secondaryText}>Reject</Text>
@@ -62,43 +66,116 @@ function RegionalSuggestionCard({ item, onReview }) {
   );
 }
 
+function formatJobTimestamp(value) {
+  if (!value) {
+    return 'Never';
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return 'Unknown time';
+  }
+
+  return parsed.toLocaleString();
+}
+
+function BackgroundJobCard({ item }) {
+  const statusToneStyle = item.isHealthy ? styles.healthGood : styles.healthBad;
+  const statusTextStyle = item.isHealthy ? styles.healthGoodText : styles.healthBadText;
+  const statusLabel = item.isHealthy ? 'Healthy' : 'Needs attention';
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.healthHeader}>
+        <Text style={styles.cardTitle}>{item.jobName}</Text>
+        <View style={[styles.healthBadge, statusToneStyle]}>
+          <Text style={[styles.healthBadgeText, statusTextStyle]}>{statusLabel}</Text>
+        </View>
+      </View>
+      <Text style={styles.cardMeta}>Schedule: {item.schedule || 'Missing cron job'}</Text>
+      <Text style={styles.cardMeta}>Last run: {formatJobTimestamp(item.lastRunStartedAt)}</Text>
+      <Text style={styles.cardMeta}>Last status: {item.lastRunStatus || 'No runs yet'}</Text>
+    </View>
+  );
+}
+
 export default function AdminScreen({
   onReviewPendingSchoolEpsu,
   onReviewRegionalEpsuSuggestion,
   onReleaseQueuedPostsNow,
+  navigation,
 }) {
   const insets = useSafeAreaInsets();
   const [pendingSchools, setPendingSchools] = useState([]);
   const [regionalSuggestions, setRegionalSuggestions] = useState([]);
   const [loadError, setLoadError] = useState('');
+  const [regionalLoadError, setRegionalLoadError] = useState('');
+  const [jobHealth, setJobHealth] = useState([]);
+  const [jobHealthError, setJobHealthError] = useState('');
   const [isReleasingQueuedPosts, setIsReleasingQueuedPosts] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  useEffect(() => {
+  const loadAdministrationData = () => {
     let isActive = true;
 
-    Promise.all([
+    setIsRefreshing(true);
+
+    Promise.allSettled([
       fetchPendingSchoolEpsus(),
       fetchRegionalEpsuSuggestions(),
+      fetchBackgroundJobHealth(),
     ])
-      .then(([pendingSchoolsResult, regionalSuggestionsResult]) => {
-        if (isActive) {
-          setPendingSchools(pendingSchoolsResult);
-          setRegionalSuggestions(regionalSuggestionsResult);
+      .then(([pendingSchoolsResult, regionalSuggestionsResult, jobHealthResult]) => {
+        if (!isActive) {
+          return;
+        }
+
+        if (pendingSchoolsResult.status === 'fulfilled') {
+          setPendingSchools(pendingSchoolsResult.value);
           setLoadError('');
+        } else {
+          setPendingSchools([]);
+          setLoadError(pendingSchoolsResult.reason?.message ?? 'Could not load pending schools');
+        }
+
+        if (regionalSuggestionsResult.status === 'fulfilled') {
+          setRegionalSuggestions(regionalSuggestionsResult.value);
+          setRegionalLoadError('');
+        } else {
+          setRegionalSuggestions([]);
+          setRegionalLoadError(regionalSuggestionsResult.reason?.message ?? 'Could not load regional trial requests');
+        }
+
+        if (jobHealthResult.status === 'fulfilled') {
+          setJobHealth(jobHealthResult.value);
+          setJobHealthError('');
+        } else {
+          setJobHealth([]);
+          setJobHealthError(jobHealthResult.reason?.message ?? 'Could not load background job health');
         }
       })
-      .catch((error) => {
+      .finally(() => {
         if (isActive) {
-          setPendingSchools([]);
-          setRegionalSuggestions([]);
-          setLoadError(error?.message ?? 'Could not load administration data');
+          setIsRefreshing(false);
         }
       });
 
     return () => {
       isActive = false;
     };
+  };
+
+  useEffect(() => {
+    const cleanup = loadAdministrationData();
+    return cleanup;
   }, []);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      const cleanup = loadAdministrationData();
+      return cleanup;
+    }, [])
+  );
 
   const handleReview = async (item, status) => {
     let logoUri = null;
@@ -136,7 +213,7 @@ export default function AdminScreen({
     if (status === 'approved') {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        showAppDialog('Regional suggestion', 'Allow photo library access to choose a regional logo');
+        showAppDialog('Regional Epsu review', 'Allow photo library access to choose a regional logo');
         return;
       }
 
@@ -149,18 +226,16 @@ export default function AdminScreen({
       logoUri = getPickedAssetUri(pickerResult);
 
       if (!logoUri) {
-        showAppDialog('Regional suggestion', 'Choose a regional logo before approving this suggestion');
+        showAppDialog('Regional Epsu review', 'Choose a regional logo before approving this Epsu');
         return;
       }
     }
 
-    const result = await onReviewRegionalEpsuSuggestion(item.title, item.country_code, status, logoUri);
-    showAppDialog('Regional suggestion', result?.ok ? `Suggestion ${status}` : (result?.message ?? 'Could not review this suggestion'));
+    const result = await onReviewRegionalEpsuSuggestion(item.id, status, logoUri);
+    showAppDialog('Regional Epsu review', result?.ok ? `Regional Epsu ${status}` : (result?.message ?? 'Could not review this Epsu'));
 
     if (result?.ok) {
-      setRegionalSuggestions((current) =>
-        current.filter((entry) => !(entry.title === item.title && entry.country_code === item.country_code))
-      );
+      setRegionalSuggestions((current) => current.filter((entry) => entry.id !== item.id));
     }
   };
 
@@ -195,29 +270,84 @@ export default function AdminScreen({
           <Text style={styles.sectionEyebrow}>Administration</Text>
           <Text style={styles.sectionTitle}>Administration</Text>
           <TouchableOpacity
-            style={[styles.primaryButton, isReleasingQueuedPosts && styles.primaryButtonDisabled]}
+            style={styles.primaryActionButton}
+            onPress={() => navigation.navigate('AdminFullhourQueue')}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.primaryActionText}>Administrator queue</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.dangerActionButton, isReleasingQueuedPosts && styles.primaryButtonDisabled]}
             onPress={handleReleaseQueuedPosts}
             activeOpacity={0.85}
             disabled={isReleasingQueuedPosts}
           >
-            <Text style={styles.primaryText}>
+            <Text style={styles.dangerActionText}>
               {isReleasingQueuedPosts ? 'Releasing queued posts' : 'Release queued posts now'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.secondaryActionButton}
+            onPress={() => {
+              const cleanup = loadAdministrationData();
+              return cleanup;
+            }}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.secondaryActionText}>
+              {isRefreshing ? 'Refreshing admin lists' : 'Refresh admin lists'}
             </Text>
           </TouchableOpacity>
           {loadError ? (
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>Could not load administration data</Text>
+              <Text style={styles.cardTitle}>Could not load pending schools</Text>
               <Text style={styles.cardBody}>{loadError}</Text>
             </View>
-          ) : null}
+          ) : (
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryText}>Pending schools: {pendingSchools.length}</Text>
+            </View>
+          )}
+          <View style={styles.diagnosticsSection}>
+            <Text style={styles.sectionTitleSecondary}>Background jobs</Text>
+            <Text style={styles.helper}>
+              Watch the hourly post cycle, cleanup tasks, and trial processing instead of assuming cron is healthy
+            </Text>
+            {jobHealthError ? (
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>Could not load background jobs</Text>
+                <Text style={styles.cardBody}>{jobHealthError}</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={jobHealth}
+                keyExtractor={(item) => item.jobName}
+                scrollEnabled={false}
+                contentContainerStyle={jobHealth.length === 0 ? styles.emptyContent : styles.cardList}
+                renderItem={({ item }) => <BackgroundJobCard item={item} />}
+                ListEmptyComponent={
+                  <View style={styles.card}>
+                    <Text style={styles.cardTitle}>No background jobs found</Text>
+                    <Text style={styles.cardBody}>The admin cron monitors are not available yet</Text>
+                  </View>
+                }
+              />
+            )}
+          </View>
         </>
       )}
       ListFooterComponent={(
         <View style={styles.footerSection}>
-          <Text style={styles.sectionTitleSecondary}>Regional suggestions</Text>
+          <Text style={styles.sectionTitleSecondary}>Regional trial requests</Text>
           <Text style={styles.helper}>
-            Review requests for new city, region, or country Epsus
+            Review requests for new city, region, or country trial Epsus
           </Text>
+          {regionalLoadError ? (
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Could not load regional requests</Text>
+              <Text style={styles.cardBody}>{regionalLoadError}</Text>
+            </View>
+          ) : null}
           <FlatList
             data={regionalSuggestions}
             keyExtractor={(item) => `${item.title}:${item.country_code ?? 'unknown'}`}
@@ -226,7 +356,7 @@ export default function AdminScreen({
             renderItem={({ item }) => <RegionalSuggestionCard item={item} onReview={handleRegionalReview} />}
             ListEmptyComponent={
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>No regional suggestions</Text>
+                <Text style={styles.cardTitle}>No regional requests</Text>
                 <Text style={styles.cardBody}>Nobody has requested a new regional Epsu yet</Text>
               </View>
             }
@@ -279,7 +409,22 @@ const styles = StyleSheet.create({
     color: UI.colors.textMuted,
     marginBottom: 14,
   },
+  summaryCard: {
+    backgroundColor: '#fff5f8',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 14,
+  },
+  summaryText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: UI.colors.text,
+  },
   footerSection: {
+    marginTop: UI.spacing.section,
+  },
+  diagnosticsSection: {
     marginTop: UI.spacing.section,
   },
   emptyContent: {
@@ -320,18 +465,51 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: UI.colors.textSoft,
   },
+  healthHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  healthBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+  },
+  healthGood: {
+    backgroundColor: '#effaf2',
+    borderColor: '#b8e1c2',
+  },
+  healthBad: {
+    backgroundColor: '#fff3f5',
+    borderColor: '#f0b5c0',
+  },
+  healthBadgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  healthGoodText: {
+    color: '#1d7a36',
+  },
+  healthBadText: {
+    color: UI.colors.danger,
+  },
   actionRow: {
     flexDirection: 'row',
     gap: 8,
     marginTop: 14,
   },
   secondaryButton: {
+    flex: 1,
+    minHeight: 44,
     borderRadius: UI.radius.button,
     borderWidth: 1,
     borderColor: UI.colors.primary,
     paddingHorizontal: 12,
-    paddingVertical: 10,
     backgroundColor: UI.colors.surfaceMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   secondaryText: {
     color: UI.colors.primary,
@@ -339,16 +517,68 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   primaryButton: {
+    flex: 1,
+    minHeight: 44,
     borderRadius: UI.radius.button,
     backgroundColor: UI.colors.primary,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   primaryButtonDisabled: {
     opacity: 0.7,
   },
+  primaryActionButton: {
+    minHeight: 56,
+    backgroundColor: UI.colors.primary,
+    borderRadius: UI.radius.row,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+    paddingHorizontal: 16,
+  },
+  primaryActionText: {
+    color: UI.colors.surface,
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  dangerActionButton: {
+    minHeight: 56,
+    backgroundColor: '#fff2f4',
+    borderRadius: UI.radius.row,
+    borderWidth: 1,
+    borderColor: '#f0b5c0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+    paddingHorizontal: 16,
+  },
+  dangerActionText: {
+    color: UI.colors.danger,
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  secondaryActionButton: {
+    minHeight: 56,
+    backgroundColor: UI.colors.surface,
+    borderRadius: UI.radius.row,
+    borderWidth: 1,
+    borderColor: UI.colors.border,
+    paddingVertical: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  secondaryActionText: {
+    color: UI.colors.text,
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
   primaryText: {
-    color: '#fff',
+    color: UI.colors.surface,
     fontSize: 13,
     fontWeight: '800',
   },

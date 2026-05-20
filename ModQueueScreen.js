@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -11,6 +12,7 @@ import {
 import { TouchableOpacity } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { showAppDialog } from './components/AppDialog';
+import { fetchFlaggedQueuedPostsForEpsu, fetchMutedAuthorIdsForEpsu, fetchOpenReportsForEpsu } from './lib/api/moderation';
 import { UI } from './lib/uiTheme';
 import { REPORT_REASONS } from './ReportScreen';
 
@@ -79,11 +81,14 @@ function ReportReasonRow({ label, count }) {
 
 function QueuePostCard({ item, onPress }) {
   const flaggedLabel = item.flaggedKeywords?.length ? `Keyword filter: ${item.flaggedKeywords.join(', ')}` : null;
-  const reportCount = Array.isArray(item.reports) ? item.reports.length : 0;
-  const queueTypeLabel = item.queueType === 'flagged' ? 'Keyword filter' : 'User reports';
-  const queueTypeMeta = item.queueType === 'flagged'
-    ? 'This post is waiting for moderator review before release'
-    : `${reportCount} report${reportCount === 1 ? '' : 's'} waiting for review`;
+  const isAdminQueuedPost = item.queueType === 'adminQueued';
+  const queueTypeLabel = isAdminQueuedPost
+    ? 'Queued post'
+    : item.queueType === 'flaggedAndReport'
+      ? 'Keyword filter + user reports'
+    : item.queueType === 'flagged'
+      ? 'Keyword filter'
+      : 'User reports';
 
   return (
     <View style={styles.card}>
@@ -93,7 +98,6 @@ function QueuePostCard({ item, onPress }) {
           <Text style={styles.queueTypePillText}>{queueTypeLabel}</Text>
         </View>
       </View>
-      <Text style={styles.queueSummary}>{queueTypeMeta}</Text>
       {flaggedLabel ? <Text style={styles.reportCategoryCompact}>{flaggedLabel}</Text> : null}
 
       <View style={styles.queueEvidenceCard}>
@@ -121,19 +125,96 @@ export default function ModQueueScreen({
   onDismissQueuedPost,
   onRemoveReportedPost,
   onMuteReportedAuthor,
+  adminQueuedPosts = [],
+  loadError = '',
+  isRefreshing = false,
+  onRefreshQueue,
+  onAfterModerationAction,
+  onIgnoreAdminQueuedPost,
 }) {
   const insets = useSafeAreaInsets();
-  const [currentTime, setCurrentTime] = useState(() => Date.now());
   const epsuId = route?.params?.epsuId ?? null;
   const postId = route?.params?.postId ?? null;
   const epsu = epsus.find((item) => item.id === epsuId) ?? null;
+  const [liveReports, setLiveReports] = React.useState(null);
+  const [liveQueuedFlags, setLiveQueuedFlags] = React.useState(null);
+  const [mutedAuthorIds, setMutedAuthorIds] = React.useState([]);
+  const sourceReports = liveReports ?? reports;
+  const sourceQueuedFlags = liveQueuedFlags ?? queuedFlaggedPosts;
+  const removePostFromLocalQueueState = React.useCallback((postId, queueType) => {
+    if (queueType === 'flagged' || queueType === 'flaggedAndReport') {
+      setLiveQueuedFlags((current) => (
+        current == null ? current : current.filter((post) => post.id !== postId)
+      ));
+    }
+
+    if (queueType === 'report' || queueType === 'flaggedAndReport') {
+      setLiveReports((current) => (
+        current == null ? current : current.filter((report) => report.post?.id !== postId)
+      ));
+    }
+  }, []);
+
+  const loadQueueData = React.useCallback(() => {
+    if (!epsuId) {
+      setLiveReports(null);
+      setLiveQueuedFlags(null);
+      setMutedAuthorIds([]);
+      return () => {};
+    }
+
+    let isActive = true;
+
+    const requests = [
+      fetchMutedAuthorIdsForEpsu(epsuId).catch(() => null),
+    ];
+
+    if (mode === 'admin-queue' || mode === 'admin-investigation') {
+      requests.push(Promise.resolve(null), Promise.resolve(null));
+    } else {
+      requests.push(
+        fetchOpenReportsForEpsu(epsuId).catch(() => null),
+        fetchFlaggedQueuedPostsForEpsu(epsuId).catch(() => null)
+      );
+    }
+
+    Promise.all(requests).then(([nextMutedAuthorIds, nextReports, nextQueuedFlags]) => {
+      if (!isActive) {
+        return;
+      }
+
+      if (nextMutedAuthorIds) {
+        setMutedAuthorIds(nextMutedAuthorIds);
+      }
+
+      if (nextReports) {
+        setLiveReports(nextReports);
+      }
+
+      if (nextQueuedFlags) {
+        setLiveQueuedFlags(nextQueuedFlags);
+      }
+    });
+
+    return () => {
+      isActive = false;
+    };
+  }, [epsuId, mode]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      const cleanup = loadQueueData();
+      return cleanup;
+    }, [loadQueueData])
+  );
+
   const filteredReports = useMemo(
-    () => reports.filter((report) => report.post?.epsuId === epsuId),
-    [epsuId, reports]
+    () => sourceReports.filter((report) => report.post?.epsuId === epsuId),
+    [epsuId, sourceReports]
   );
   const filteredQueuedFlags = useMemo(
-    () => queuedFlaggedPosts.filter((post) => post.epsuId === epsuId),
-    [epsuId, queuedFlaggedPosts]
+    () => sourceQueuedFlags.filter((post) => post.epsuId === epsuId),
+    [epsuId, sourceQueuedFlags]
   );
   const groupedPosts = useMemo(() => {
     const grouped = new Map();
@@ -160,23 +241,45 @@ export default function ModQueueScreen({
 
     return Array.from(grouped.values()).sort((left, right) => left.number - right.number);
   }, [filteredReports, posts]);
-  const queueItems = useMemo(
-    () =>
-      [
-        ...filteredQueuedFlags.map((post) => ({
+  const queueItems = useMemo(() => {
+    const merged = new Map();
+
+    filteredQueuedFlags.forEach((post) => {
+      merged.set(post.id, {
+        ...post,
+        queueType: 'flagged',
+        reports: [],
+      });
+    });
+
+    groupedPosts.forEach((post) => {
+      const existing = merged.get(post.id);
+      if (existing) {
+        merged.set(post.id, {
+          ...existing,
           ...post,
-          queueType: 'flagged',
-        })),
-        ...groupedPosts.map((post) => ({
-          ...post,
-          queueType: 'report',
-        })),
-      ].sort((left, right) => left.number - right.number),
-    [filteredQueuedFlags, groupedPosts]
-  );
+          flaggedKeywords: existing.flaggedKeywords ?? [],
+          reports: post.reports,
+          queueType: 'flaggedAndReport',
+        });
+        return;
+      }
+
+      merged.set(post.id, {
+        ...post,
+        flaggedKeywords: [],
+        queueType: 'report',
+      });
+    });
+
+    return Array.from(merged.values()).sort((left, right) => left.number - right.number);
+  }, [filteredQueuedFlags, groupedPosts]);
   const investigatedPost = groupedPosts.find((item) => item.id === postId) ?? null;
-  const investigatedQueuedPost = filteredQueuedFlags.find((item) => item.id === postId) ?? null;
-  const investigationTarget = investigatedQueuedPost ?? investigatedPost ?? null;
+  const investigatedQueueItem = queueItems.find((item) => item.id === postId) ?? null;
+  const investigatedAdminQueuedPost = adminQueuedPosts.find((item) => item.id === postId) ?? null;
+  const investigationTarget = mode === 'admin-investigation'
+    ? investigatedAdminQueuedPost
+    : investigatedQueueItem ?? null;
   const reportReasonCounts = useMemo(() => {
     const counts = REPORT_REASONS.reduce((accumulator, reason) => {
       accumulator[reason] = 0;
@@ -195,45 +298,76 @@ export default function ModQueueScreen({
 
     return counts;
   }, [investigatedPost]);
-  const nextBatchCountdown = useMemo(() => {
-    const now = new Date(currentTime);
-    const nextHour = new Date(now);
-    nextHour.setMinutes(0, 0, 0);
-    nextHour.setHours(nextHour.getHours() + 1);
-    const remainingMs = Math.max(0, nextHour.getTime() - now.getTime());
-    const totalSeconds = Math.floor(remainingMs / 1000);
-    const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
-    const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
-    const seconds = String(totalSeconds % 60).padStart(2, '0');
-    return `${hours}:${minutes}:${seconds}`;
-  }, [currentTime]);
-
-  useEffect(() => {
-    if (isRemoved) {
-      return undefined;
-    }
-
-    const interval = setInterval(() => {
-      setCurrentTime(Date.now());
-    }, 1000);
-
-    return () => {
-      clearInterval(interval);
-    };
-  }, [isRemoved]);
+  const visibleReportReasons = useMemo(
+    () => REPORT_REASONS.filter((reason) => (reportReasonCounts[reason] ?? 0) > 0),
+    [reportReasonCounts]
+  );
   const actionState = route?.params?.actionState ?? {};
-  const isMuted = Boolean(postId && actionState?.[postId]?.muted);
+  const isMuted = Boolean(
+    (postId && actionState?.[postId]?.muted)
+    || (investigationTarget?.authorId && mutedAuthorIds.includes(investigationTarget.authorId))
+  );
   const isRemoved = Boolean(postId && actionState?.[postId]?.removed);
+  const isAdminQueueMode = mode === 'admin-queue';
+  const isAdminInvestigationMode = mode === 'admin-investigation';
+  const adminQueueItems = useMemo(
+    () => adminQueuedPosts.map((post) => ({
+      ...post,
+      queueType: 'adminQueued',
+    })),
+    [adminQueuedPosts]
+  );
 
   const handleDismiss = async (post) => {
-    const result = post.queueType === 'flagged'
-      ? await onDismissQueuedPost(post.id)
-      : await onDismissReport(post.id);
+    if (post.queueType === 'adminQueued') {
+      await onIgnoreAdminQueuedPost?.(post.id);
+      await onAfterModerationAction?.();
+      navigation.goBack();
+      return;
+    }
+
+    let result = null;
+    if (post.queueType === 'flaggedAndReport') {
+      const [queuedResult, reportResult] = await Promise.all([
+        onDismissQueuedPost(post.id),
+        onDismissReport(post.id),
+      ]);
+      const queuedOk = Boolean(queuedResult?.ok);
+      const reportOk = Boolean(reportResult?.ok);
+      const queuedBenign = !queuedOk && (
+        queuedResult?.alreadyHandled
+        || queuedResult?.message === 'Post no longer requires keyword-review dismissal'
+        || queuedResult?.message === 'Post was already reviewed'
+      );
+      const effectiveQueuedOk = queuedOk || queuedBenign;
+      const effectiveReportOk = reportOk;
+      const isPartialSuccess = effectiveQueuedOk !== effectiveReportOk;
+
+      result = {
+        ok: Boolean(effectiveQueuedOk && effectiveReportOk),
+        partial: isPartialSuccess,
+        message: !effectiveReportOk
+          ? (reportResult?.message ?? 'Could not dismiss user reports')
+          : !effectiveQueuedOk
+            ? (queuedResult?.message ?? 'Could not dismiss keyword filter review')
+            : null,
+      };
+    } else {
+      result = post.queueType === 'flagged'
+        ? await onDismissQueuedPost(post.id)
+        : await onDismissReport(post.id);
+    }
     showAppDialog(
-      'Mod Queue',
-      result?.ok ? 'Report dismissed' : result?.message ?? 'Could not dismiss report'
+      isAdminInvestigationMode ? 'Admin queue' : 'Mod Queue',
+      result?.ok
+        ? 'Report dismissed'
+        : result?.partial
+          ? 'Reports were dismissed, but keyword-review cleanup did not fully complete'
+        : result?.message ?? 'Could not dismiss report'
     );
-    if (result?.ok) {
+    if (result?.ok || result?.partial) {
+      removePostFromLocalQueueState(post.id, post.queueType);
+      await onAfterModerationAction?.();
       navigation.goBack();
     }
   };
@@ -241,6 +375,7 @@ export default function ModQueueScreen({
   const handleRemove = async (post) => {
     const result = await onRemoveReportedPost(post.id);
     if (result?.ok) {
+      await onAfterModerationAction?.();
       navigation.setParams({
         actionState: {
           ...actionState,
@@ -261,6 +396,12 @@ export default function ModQueueScreen({
   const handleMute = async (post) => {
     const result = await onMuteReportedAuthor(post.id, post.authorId, post.epsuId);
     if (result?.ok) {
+      setMutedAuthorIds((current) => (
+        post.authorId && !current.includes(post.authorId)
+          ? [...current, post.authorId]
+          : current
+      ));
+      await onAfterModerationAction?.();
       navigation.setParams({
         actionState: {
           ...actionState,
@@ -278,7 +419,7 @@ export default function ModQueueScreen({
     );
   };
 
-  if (mode === 'investigation') {
+  if (mode === 'investigation' || mode === 'admin-investigation') {
     return (
       <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
@@ -287,34 +428,42 @@ export default function ModQueueScreen({
         >
           <Text style={styles.sectionEyebrow}>Investigation</Text>
           <Text style={styles.sectionTitle}>
-            {investigationTarget ? `All reports of post #${investigationTarget.number}` : 'All reports'}
+            {investigationTarget
+              ? (isAdminInvestigationMode
+                ? `Review post #${investigationTarget.number}`
+                : `All reports of post #${investigationTarget.number}`)
+              : (isAdminInvestigationMode ? 'Queued post' : 'All reports')}
           </Text>
 
           {investigationTarget ? (
             <>
-              {investigatedQueuedPost ? (
+              {((investigationTarget?.queueType === 'flagged' || investigationTarget?.queueType === 'flaggedAndReport') && investigationTarget) || investigatedAdminQueuedPost ? (
                 <View style={styles.card}>
-                  <Text style={styles.reportLabel}>Keyword filter</Text>
-                  <Text style={styles.reportExplanation}>
-                    {isRemoved
-                      ? 'This post has been removed and will not be released'
-                      : `${nextBatchCountdown} until everyone will see this post`}
+                  <Text style={styles.reportLabel}>
+                    {investigatedAdminQueuedPost ? 'Queued post' : 'Keyword filter'}
                   </Text>
+                  {!investigatedAdminQueuedPost ? (
+                    <Text style={styles.reportExplanation}>
+                      {isRemoved
+                        ? 'This post has been removed and will not be released'
+                        : 'This post is waiting for moderator review before release'}
+                    </Text>
+                  ) : null}
                   <EvidencePostCard
                     post={investigationTarget}
-                    keywords={investigatedQueuedPost.flaggedKeywords ?? []}
+                    keywords={(investigationTarget ?? investigatedAdminQueuedPost)?.flaggedKeywords ?? []}
                   />
                 </View>
               ) : null}
 
-              {investigatedPost ? (
+              {(investigationTarget?.reports?.length || investigatedPost) ? (
                 <View style={styles.card}>
                   <Text style={styles.reportLabel}>Reports</Text>
                   <Text style={styles.reportExplanation}>
-                    {investigatedPost.reports.length} report{investigatedPost.reports.length === 1 ? '' : 's'}
+                    {(investigationTarget?.reports?.length ?? investigatedPost?.reports?.length ?? 0)} report{(investigationTarget?.reports?.length ?? investigatedPost?.reports?.length ?? 0) === 1 ? '' : 's'}
                   </Text>
                   <View style={styles.reasonCountList}>
-                    {REPORT_REASONS.map((reason) => (
+                    {visibleReportReasons.map((reason) => (
                       <ReportReasonRow
                         key={reason}
                         label={reason}
@@ -333,7 +482,9 @@ export default function ModQueueScreen({
                       onPress={() => handleDismiss(investigationTarget)}
                       activeOpacity={0.85}
                     >
-                      <Text style={styles.primaryButtonText}>Dismiss</Text>
+                      <Text style={styles.primaryButtonText}>
+                        {investigatedAdminQueuedPost ? 'Ignore' : 'Dismiss'}
+                      </Text>
                     </TouchableOpacity>
                   </View>
                   <View style={styles.actionSlot}>
@@ -371,17 +522,29 @@ export default function ModQueueScreen({
   return (
     <View style={styles.screen}>
       <View style={[styles.content, { paddingTop: insets.top + 12 }]}>
-        <Text style={styles.sectionEyebrow}>Mod queue</Text>
-        <Text style={styles.sectionTitle}>{epsu?.name ?? 'Epsu'}</Text>
+        <Text style={styles.sectionEyebrow}>{isAdminQueueMode ? 'Administrator queue' : 'Mod queue'}</Text>
+        <Text style={styles.sectionTitle}>
+          {isAdminQueueMode ? (epsu?.name ?? 'Administrator queue') : epsu?.name ?? 'Epsu'}
+        </Text>
+        {isAdminQueueMode ? (
+          <>
+            {loadError ? (
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>Could not load queue</Text>
+                <Text style={styles.cardBody}>{loadError}</Text>
+              </View>
+            ) : null}
+          </>
+        ) : null}
         <FlatList
-          data={queueItems}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={queueItems.length === 0 ? styles.emptyContent : styles.list}
+          data={isAdminQueueMode ? adminQueueItems : queueItems}
+          keyExtractor={(item) => `${item.queueType}:${item.id}`}
+          contentContainerStyle={(isAdminQueueMode ? adminQueueItems : queueItems).length === 0 ? styles.emptyContent : styles.list}
           renderItem={({ item }) => (
             <QueuePostCard
               item={item}
               onPress={(post) =>
-                navigation.navigate('Investigation', {
+                navigation.navigate(isAdminQueueMode ? 'AdminFullhourInvestigation' : 'Investigation', {
                   epsuId,
                   postId: post.id,
                 })
@@ -390,8 +553,12 @@ export default function ModQueueScreen({
           )}
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <Text style={styles.emptyTitle}>No queue items</Text>
-              <Text style={styles.emptyText}>Queued flagged posts and reports will show here</Text>
+              <Text style={styles.emptyTitle}>{isAdminQueueMode ? 'No queued posts' : 'No queue items'}</Text>
+              <Text style={styles.emptyText}>
+                {isAdminQueueMode
+                  ? 'Everything waiting for the next full hour will show here'
+                  : 'Queued flagged posts and reports will show here'}
+              </Text>
             </View>
           }
         />
@@ -435,17 +602,17 @@ const styles = StyleSheet.create({
   },
   emptyState: {
     alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 24,
+    paddingHorizontal: UI.empty.horizontalPadding,
+    paddingVertical: UI.empty.horizontalPadding,
   },
   emptyTitle: {
-    fontSize: 24,
+    fontSize: UI.empty.titleSize,
     fontWeight: '900',
     color: UI.colors.text,
-    marginBottom: 8,
+    marginBottom: UI.empty.iconGap,
   },
   emptyText: {
-    fontSize: 15,
+    fontSize: UI.empty.textSize,
     color: UI.colors.textMuted,
     textAlign: 'center',
   },

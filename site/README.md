@@ -12,7 +12,6 @@ Use this folder as the Render static site publish root.
 - `/guidelines`
 - `/privacy`
 - `/delete-account`
-- `/whitepaper`
 - `/auth/confirm/`
 - `/reset-password/`
 - `/auth-confirm.html`

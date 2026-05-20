@@ -18,7 +18,6 @@ import { TouchableOpacity } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { showAppDialog } from './components/AppDialog';
 import { findCountryByCode } from './lib/countries';
-import { getEmergencyDialNumber, getEmergencyText, getFindaHelplineUrl } from './lib/helpResources';
 import { UI } from './lib/uiTheme';
 
 let SharingModule = null;
@@ -33,7 +32,8 @@ const DOCUMENT_URLS = {
   'Community Guidelines': 'https://epsu.site/guidelines',
   'Privacy Policy': 'https://epsu.site/privacy',
 };
-const SUPPORT_EMAIL = 'j.truumaa@gmail.com';
+const SUPPORT_EMAIL = 'epsu.site@protonmail.com';
+const CRISIS_EMAIL = SUPPORT_EMAIL;
 const RANDOM_FOODS = [
   'Pizza',
   'Sushi',
@@ -92,13 +92,17 @@ function SettingsToggleRow({ label, value, onValueChange, disabled = false, isLa
   return (
     <View style={[styles.row, isLast && styles.rowLast]}>
       <Text style={styles.rowLabel}>{label}</Text>
-      <Switch
-        value={value}
-        onValueChange={onValueChange}
-        disabled={disabled}
-        trackColor={{ false: '#d9c1cb', true: '#f08aa0' }}
-        thumbColor={value ? '#e52b50' : '#f4f3f4'}
-      />
+      <View style={styles.switchWrap}>
+        <Switch
+          value={value}
+          onValueChange={onValueChange}
+          disabled={disabled}
+          trackColor={{ false: '#d9c1cb', true: '#f08aa0' }}
+          thumbColor={value ? '#e52b50' : '#f4f3f4'}
+          ios_backgroundColor="#d9c1cb"
+          style={Platform.OS === 'ios' ? styles.iosSwitch : null}
+        />
+      </View>
     </View>
   );
 }
@@ -152,16 +156,14 @@ function SettingsMainScreen({
   const [randomFood] = useState(
     () => RANDOM_FOODS[Math.floor(Math.random() * RANDOM_FOODS.length)] ?? 'Pizza'
   );
-  const areNotificationsRegistered = pushRegistrationStatus === 'registered';
-  const effectiveNotificationsEnabled = notificationsEnabled && areNotificationsRegistered;
-  const [localNotificationsEnabled, setLocalNotificationsEnabled] = useState(effectiveNotificationsEnabled);
+  const [localNotificationsEnabled, setLocalNotificationsEnabled] = useState(notificationsEnabled);
   const [isNotificationsBusy, setIsNotificationsBusy] = useState(false);
 
   useEffect(() => {
     if (!isNotificationsBusy) {
-      setLocalNotificationsEnabled(effectiveNotificationsEnabled);
+      setLocalNotificationsEnabled(notificationsEnabled);
     }
-  }, [effectiveNotificationsEnabled, isNotificationsBusy]);
+  }, [isNotificationsBusy, notificationsEnabled]);
 
   const openDocument = async (title) => {
     const url = DOCUMENT_URLS[title];
@@ -173,7 +175,7 @@ function SettingsMainScreen({
       return;
     }
 
-    const previousValue = effectiveNotificationsEnabled;
+    const previousValue = notificationsEnabled;
     setIsNotificationsBusy(true);
     setLocalNotificationsEnabled(nextValue);
     const result = await onToggleNotifications(nextValue);
@@ -221,7 +223,6 @@ function SettingsMainScreen({
         <SettingsAction label="Terms of Service" onPress={() => openDocument('Terms of Service')} />
         <SettingsAction label="Community Guidelines" onPress={() => openDocument('Community Guidelines')} />
         <SettingsAction label="Privacy Policy" onPress={() => openDocument('Privacy Policy')} />
-        <SettingsAction label="Epsu Whitepaper" onPress={() => openDocument('Epsu Whitepaper')} />
         <SettingsAction label="Log out" onPress={onLogout} destructive />
         <SettingsAction
           label="Delete account"
@@ -270,14 +271,15 @@ function AccountHistoryScreen({ onFetchAccountHistory }) {
   const [isExporting, setIsExporting] = useState(false);
 
   const handleExport = async () => {
-    if (!history || isExporting) {
+    if (isExporting) {
       return;
     }
 
     try {
       setIsExporting(true);
+      const exportHistory = await onFetchAccountHistory({ full: true });
       const fileName = `epsu-account-history-${Date.now()}`;
-      const fileContents = JSON.stringify(history, null, 2);
+      const fileContents = JSON.stringify(exportHistory, null, 2);
 
       if (Platform.OS === 'android' && FileSystem.StorageAccessFramework) {
         const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
@@ -324,7 +326,7 @@ function AccountHistoryScreen({ onFetchAccountHistory }) {
     }
   };
 
-  const loadHistory = async () => {
+  const loadHistory = React.useCallback(async () => {
     setIsLoading(true);
     try {
       const result = await onFetchAccountHistory();
@@ -336,18 +338,23 @@ function AccountHistoryScreen({ onFetchAccountHistory }) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [onFetchAccountHistory]);
 
   useFocusEffect(
     React.useCallback(() => {
       loadHistory().catch(() => {});
-    }, [onFetchAccountHistory])
+    }, [loadHistory])
   );
 
   return (
     <ScreenFrame insets={insets} eyebrow="Your settings" title="Account history">
       <View style={styles.card}>
         <Text style={styles.panelText}>This page lists the main account data tied to you</Text>
+        {history?.meta?.sectionLimit ? (
+          <Text style={styles.panelSubtext}>
+            Showing the most recent {history.meta.sectionLimit} items per section here. Export the data file for full history.
+          </Text>
+        ) : null}
         {isLoading ? <ActivityIndicator color="#e52b50" style={styles.historyLoader} /> : null}
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
         {history ? (
@@ -372,7 +379,6 @@ function AccountHistoryScreen({ onFetchAccountHistory }) {
               <SettingsRow label="Memberships" value={`${history.summary.memberships}`} />
               <SettingsRow label="Hosted Epsus" value={`${history.summary.hostedEpsus}`} />
               <SettingsRow label="Suggested Epsus" value={`${history.summary.suggestions}`} />
-              <SettingsRow label="School applications" value={`${history.summary.schoolApplications}`} />
               <SettingsRow label="Action records" value={`${history.summary.moderationActions}`} />
             </View>
             <HistorySection title="Posts" items={history.posts} />
@@ -383,7 +389,6 @@ function AccountHistoryScreen({ onFetchAccountHistory }) {
             <HistorySection title="Notifications" items={history.notifications} />
             <HistorySection title="Hosted Epsus" items={history.hostedEpsus} />
             <HistorySection title="Suggested Epsus" items={history.suggestions} />
-            <HistorySection title="School applications" items={history.schoolApplications} />
           </>
         ) : null}
       </View>
@@ -400,13 +405,8 @@ function HelpLink({ label, value, onPress }) {
   );
 }
 
-function HelpScreen({ currentCountryCode }) {
+function HelpScreen() {
   const insets = useSafeAreaInsets();
-  const country = findCountryByCode(currentCountryCode);
-  const emergencyText = getEmergencyText(currentCountryCode);
-  const emergencyDial = getEmergencyDialNumber(currentCountryCode);
-  const helplineUrl = getFindaHelplineUrl(currentCountryCode);
-  const countryLabel = country?.englishName ?? country?.name ?? 'your country';
 
   return (
     <ScreenFrame insets={insets} eyebrow="Your settings" title="Help">
@@ -420,20 +420,11 @@ function HelpScreen({ currentCountryCode }) {
       </View>
 
       <View style={[styles.card, styles.helpCard]}>
-        <Text style={styles.contactLabel}>Emergency</Text>
+        <Text style={styles.contactLabel}>Crisis contact</Text>
         <HelpLink
-          label={country ? `${countryLabel} emergency` : 'Emergency services'}
-          value={emergencyText}
-          onPress={emergencyDial ? () => Linking.openURL(`tel:${emergencyDial}`) : undefined}
-        />
-      </View>
-
-      <View style={[styles.card, styles.helpCard]}>
-        <Text style={styles.contactLabel}>Crisis support</Text>
-        <HelpLink
-          label="Find a Helpline"
-          value={country ? `Open ${countryLabel} helplines` : 'Open helplines by country'}
-          onPress={() => WebBrowser.openBrowserAsync(helplineUrl)}
+          label="Email"
+          value={CRISIS_EMAIL}
+          onPress={() => Linking.openURL(`mailto:${CRISIS_EMAIL}`)}
         />
       </View>
     </ScreenFrame>
@@ -662,6 +653,13 @@ const styles = StyleSheet.create({
     color: UI.colors.textMuted,
     marginBottom: 14,
   },
+  panelSubtext: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: UI.colors.textSoft,
+    marginTop: -6,
+    marginBottom: 14,
+  },
   randomFoodText: {
     marginTop: 14,
     fontSize: 14,
@@ -690,6 +688,15 @@ const styles = StyleSheet.create({
     maxWidth: '48%',
     textAlign: 'right',
   },
+  switchWrap: {
+    minWidth: Platform.OS === 'ios' ? 68 : 56,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    marginRight: Platform.OS === 'ios' ? -2 : 0,
+  },
+  iosSwitch: {
+    marginVertical: -2,
+  },
   actionButton: {
     minHeight: 56,
     justifyContent: 'center',
@@ -701,8 +708,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: UI.colors.text,
   },
+  brandText: {
+    color: UI.colors.primary,
+  },
   destructiveText: {
-      color: UI.colors.primary,
+    color: UI.colors.danger,
   },
   input: {
     minHeight: 56,

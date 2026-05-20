@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { UI } from '../lib/uiTheme';
 
 const listeners = new Set();
 
@@ -24,11 +25,13 @@ function normalizeButtons(buttons) {
   }));
 }
 
-export function showAppDialog(title, message, buttons) {
+export function showAppDialog(title, message, buttons, options = {}) {
   const payload = {
     title: normalizeDialogText(title),
     message: normalizeDialogText(message),
     buttons: normalizeButtons(buttons),
+    onClose: typeof options?.onClose === 'function' ? options.onClose : null,
+    dismissible: options?.dismissible !== false,
   };
   listeners.forEach((listener) => listener(payload));
 }
@@ -66,16 +69,28 @@ function DialogButton({ button, onPress }) {
 
 export function AppDialogHost() {
   const [dialog, setDialog] = useState(null);
+  const dialogRef = React.useRef(null);
 
   useEffect(() => {
-    const listener = (payload) => setDialog(payload);
+    const listener = (payload) => {
+      dialogRef.current?.onClose?.('replaced');
+      dialogRef.current = payload;
+      setDialog(payload);
+    };
     listeners.add(listener);
-    return () => listeners.delete(listener);
+    return () => {
+      listeners.delete(listener);
+      dialogRef.current?.onClose?.('unmounted');
+      dialogRef.current = null;
+    };
   }, []);
 
   const handlePress = async (button) => {
+    const currentDialog = dialogRef.current;
+    dialogRef.current = null;
     setDialog(null);
     await button?.onPress?.();
+    await currentDialog?.onClose?.('action');
   };
 
   const buttons = normalizeButtons(dialog?.buttons);
@@ -85,7 +100,14 @@ export function AppDialogHost() {
       visible={Boolean(dialog)}
       transparent
       animationType="fade"
-      onRequestClose={() => setDialog(null)}
+      onRequestClose={() => {
+        if (dialogRef.current?.dismissible === false) {
+          return;
+        }
+        dialogRef.current?.onClose?.('request_close');
+        dialogRef.current = null;
+        setDialog(null);
+      }}
     >
       <View style={styles.overlay}>
         <View style={styles.card}>
@@ -109,37 +131,37 @@ export function AppDialogHost() {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(32, 19, 26, 0.34)',
+    backgroundColor: UI.colors.overlay,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: UI.modal.overlayPadding,
   },
   card: {
     width: '100%',
-    maxWidth: 360,
-    borderRadius: 22,
-    backgroundColor: '#fff',
+    maxWidth: UI.modal.maxWidth,
+    borderRadius: UI.radius.modal,
+    backgroundColor: UI.colors.surface,
     borderWidth: 1,
-    borderColor: '#f2d8e0',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
+    borderColor: UI.colors.border,
+    paddingHorizontal: UI.spacing.modal,
+    paddingTop: UI.spacing.modal,
+    paddingBottom: UI.spacing.card,
   },
   title: {
-    fontSize: 20,
+    fontSize: UI.modal.titleSize,
     fontWeight: '900',
-    color: '#e52b50',
+    color: UI.colors.primary,
     marginBottom: 10,
   },
   message: {
-    fontSize: 15,
-    lineHeight: 22,
-    color: '#6d4f5c',
+    fontSize: UI.modal.bodySize,
+    lineHeight: UI.modal.bodyLineHeight,
+    color: UI.colors.textMuted,
   },
   actions: {
     flexDirection: 'row',
     alignItems: 'stretch',
-    gap: 10,
+    gap: UI.spacing.gap - 2,
     marginTop: 18,
   },
   buttonSlot: {
@@ -147,29 +169,29 @@ const styles = StyleSheet.create({
   },
   button: {
     width: '100%',
-    minHeight: 44,
-    borderRadius: 14,
-    backgroundColor: '#e52b50',
+    minHeight: UI.modal.buttonMinHeight,
+    borderRadius: UI.radius.button,
+    backgroundColor: UI.colors.primary,
     paddingHorizontal: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   buttonSecondary: {
-    backgroundColor: '#fff',
+    backgroundColor: UI.colors.surface,
     borderWidth: 1,
-    borderColor: '#efbcc9',
+    borderColor: UI.colors.border,
   },
   buttonDestructive: {
-    backgroundColor: '#c81f43',
+    backgroundColor: UI.colors.danger,
   },
   buttonText: {
-    color: '#fff',
+    color: UI.colors.surface,
     fontSize: 14,
     fontWeight: '900',
     letterSpacing: 0.3,
     textAlign: 'center',
   },
   buttonSecondaryText: {
-    color: '#e52b50',
+    color: UI.colors.primary,
   },
 });

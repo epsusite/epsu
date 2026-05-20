@@ -17,7 +17,7 @@ What the app currently does:
 - Short-lived feed cycles instead of permanent archives
 - Reactions and user reports
 - Moderator review for reported posts and queued keyword-flagged posts
-- School applications and owner/moderator tools
+- Owner/moderator tools
 - Optional push notifications for important updates
 
 What makes Epsu different:

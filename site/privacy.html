@@ -1,154 +1,357 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Epsu Privacy Policy</title>
-    <link rel="stylesheet" href="/styles.css" />
-  </head>
-  <body>
-    <main class="page doc">
-      <header class="doc-header">
-        <p class="eyebrow">Privacy</p>
-        <h1 class="doc-title">Privacy Policy</h1>
-        <p class="doc-body">
-          Effective date: April 20, 2026. This page explains what Epsu stores, why it stores it, and what choices and
-          rights you may have.
-        </p>
-      </header>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy | Epsu</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .legal-container { max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+        .toc { background: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem; border: 1px solid #ffcccc; }
+        .toc h2 { margin-top: 0; color: #e52b50; }
+        .toc ul { list-style: none; padding-left: 0; column-count: 2; column-gap: 2rem; }
+        .toc li { margin-bottom: 0.5rem; break-inside: avoid; }
+        .toc a { color: #e52b50; text-decoration: none; font-size: 0.9rem; }
+        .toc a:hover { text-decoration: underline; }
+        .legal-section { background: white; padding: 2rem; border-radius: 8px; margin-bottom: 1.5rem; border: 1px solid #ffcccc; }
+        .legal-section h2 { color: #e52b50; margin-top: 0; font-size: 1.4rem; }
+        .legal-section h3 { color: #333; margin-top: 1.8rem; font-size: 1.1rem; }
+        .legal-section p { line-height: 1.7; color: #555; margin-bottom: 1rem; }
+        .legal-section ul { line-height: 1.7; color: #555; margin-bottom: 1rem; padding-left: 1.5rem; }
+        .legal-section li { margin-bottom: 0.5rem; }
+        .highlight { background: #fff5f5; padding: 0.2rem 0.4rem; border-radius: 4px; }
+        .table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; }
+        .table th, .table td { border: 1px solid #ffcccc; padding: 0.8rem; text-align: left; font-size: 0.9rem; }
+        .table th { background: #fff5f5; color: #e52b50; }
+    </style>
+</head>
+<body>
+    <div class="legal-container">
+        <h1>Privacy Policy</h1>
+        <p>Last Updated: May 6, 2026</p>
+        <p>This Privacy Policy describes how Epsu ("we", "us", "our") collects, uses, shares, and protects your personal data when you use our mobile application, website (https://epsu.site), and related services (collectively, the "Service"). This policy complies with the EU General Data Protection Regulation (GDPR), the EU Digital Services Act (DSA) 2024, the US Children's Online Privacy Protection Act (COPPA), and all applicable data protection laws.</p>
 
-      <section class="doc-section">
-        <h2>1. Data we collect</h2>
-        <p class="doc-body">
-          Account data: email address, username, country code, notification preference, and timestamps
-          showing acceptance of the Terms of Service, Privacy Policy, and Community Guidelines.
-        </p>
-        <p class="doc-body">
-          Community data: Epsu memberships, roles, school applications, Epsu suggestions, moderator invites, owned or
-          moderated Epsus, and uploaded school logos.
-        </p>
-        <p class="doc-body">
-          Content and safety data: posts, replies, reactions, reports, moderation actions, queued keyword flags, and
-          in-app notifications.
-        </p>
-        <p class="doc-body">
-          Support and account data: account history, correction requests, account deletion requests you send us, and
-          support emails.
-        </p>
-      </section>
+        <div class="toc">
+            <h2>Table of Contents</h2>
+            <ul>
+                <li><a href="#introduction">1. Introduction</a></li>
+                <li><a href="#data-controller">2. Data Controller</a></li>
+                <li><a href="#personal-data-collected">3. Personal Data We Collect</a></li>
+                <li><a href="#how-collected">4. How We Collect Data</a></li>
+                <li><a href="#legal-basis">5. Legal Basis for Processing</a></li>
+                <li><a href="#processing-purposes">6. Purposes of Processing</a></li>
+                <li><a href="#sharing-data">7. Sharing of Personal Data</a></li>
+                <li><a href="#international-transfers">8. International Data Transfers</a></li>
+                <li><a href="#data-retention">9. Data Retention</a></li>
+                <li><a href="#your-rights">10. Your Data Protection Rights</a></li>
+                <li><a href="#exercising-rights">11. Exercising Your Rights</a></li>
+                <li><a href="#cookies">12. Cookies and Similar Technologies</a></li>
+                <li><a href="#security">13. Security of Personal Data</a></li>
+                <li><a href="#children-privacy">14. Children's Privacy</a></li>
+                <li><a href="#third-party">15. Third-Party Services</a></li>
+                <li><a href="#changes">16. Changes to This Policy</a></li>
+                <li><a href="#contact">17. Contact Information</a></li>
+                <li><a href="#eu-supplementary">18. Supplementary Terms for EU/EEA Users</a></li>
+                <li><a href="#dpo">19. Data Protection Officer</a></li>
+            </ul>
+        </div>
 
-      <section class="doc-section">
-        <h2>2. Data stored on your device</h2>
-        <p class="doc-body">
-          The app keeps some data on your device too. That includes the login session, cached app data for faster startup,
-          post drafts, the last push token, a notification prompt flag, and a pending moderator invite token.
-        </p>
-      </section>
+        <div class="legal-section" id="introduction">
+            <h2>1. Introduction</h2>
+            <p>Epsu is a mobile-first anonymous local community platform where users interact via place-based (regional) and institution-based (school) communities called "Epsus". We prioritize user privacy by design: posts are anonymous to ordinary users, with backend accountability for moderation and safety purposes only.</p>
+            <p>This policy applies to all personal data processed by Epsu, including data collected via our Expo/React Native mobile app, our static website hosted at epsu.site, and all backend services provided by Supabase, Expo, and Render. By using the Service, you acknowledge that you have read and understood this Privacy Policy.</p>
+        </div>
 
-      <section class="doc-section">
-        <h2>3. How we use data</h2>
-        <p class="doc-body">
-          We use data to create and secure accounts, run Epsus, queue and release posts, let users react and report,
-          process school applications, deliver notifications, review flagged or reported content, enforce rules, and
-          provide account history and deletion tools.
-        </p>
-      </section>
+        <div class="legal-section" id="data-controller">
+            <h2>2. Data Controller</h2>
+            <p>The data controller for your personal data is:</p>
+            <p>Epsu (pending Estonian company formation)<br>
+            Email: <a href="mailto:epsu.site@protonmail.com">epsu.site@protonmail.com</a><br>
+            Postal Address: [To be added upon company registration]</p>
+            <p>For EU/EEA users, the data controller is responsible for ensuring compliance with GDPR and DSA requirements. We will update this section with full company details once formal incorporation is completed.</p>
+        </div>
 
-      <section class="doc-section">
-        <h2>4. Legal bases for GDPR users</h2>
-        <p class="doc-body">
-          Where GDPR or similar law applies, we generally rely on contract to provide the service you request, legitimate
-          interests for security and moderation, consent for optional permissions such as push notifications or photo
-          library access, and legal obligation where retention or disclosure is required by law.
-        </p>
-      </section>
+        <div class="legal-section" id="personal-data-collected">
+            <h2>3. Personal Data We Collect</h2>
+            <p>We collect the following categories of personal data, as permitted by applicable law:</p>
 
-      <section class="doc-section">
-        <h2>5. Sharing and service providers</h2>
-        <p class="doc-body">
-          Epsu uses service providers to run the app. These currently include Supabase for authentication, database,
-          storage, and server-side functions, Expo services for mobile delivery infrastructure including notifications, and
-          Render for the public site. We do not describe this as selling your personal data.
-        </p>
-      </section>
+            <h3>3.1 Account Data</h3>
+            <p>Collected during signup via our mobile app:</p>
+            <ul>
+                <li><span class="highlight">Email address</span>: Used for authentication, password reset, and account notifications.</li>
+                <li><span class="highlight">Username</span>: Unique identifier stored in your profile, not displayed on anonymous posts.</li>
+                <li><span class="highlight">Date of birth</span>: Used to verify age eligibility (minimum 13 years global, 16 years for EU users without parental consent).</li>
+                <li><span class="highlight">Country of residence</span>: Used to assign regional Epsu memberships and comply with local laws.</li>
+                <li><span class="highlight">Password</span>: Stored as a bcrypt hash via Supabase Auth, never stored in plaintext.</li>
+                <li><span class="highlight">Policy acceptance timestamps</span>: Records of when you accept our Terms of Service, Privacy Policy, and Community Guidelines.</li>
+                <li><span class="highlight">Notification preferences</span>: Boolean flag for optional push notifications, stored in your profile.</li>
+            </ul>
 
-      <section class="doc-section">
-        <h2>6. Permissions</h2>
-        <p class="doc-body">
-          Epsu may request notification permission so it can deliver push notifications, and photo library permission only
-          if you choose to upload a school logo while creating a school Epsu.
-        </p>
-      </section>
+            <h3>3.2 Community and Content Data</h3>
+            <ul>
+                <li><span class="highlight">Post content</span>: Titles, bodies, and reply content you submit. Posts are anonymous to other users, but author_id is stored in our database for moderation, safety, and deletion purposes. On account deletion, the delete_own_account RPC removes the auth user and profile-linked records, but does not nullify author_id on live posts; posts remain with de-identified author until their scheduled deletion cycle ends.</li>
+                <li><span class="highlight">Post metadata</span>: Epsu ID, post number, reply-to-post ID, like/dislike counts, post status (active/deleted_by_threshold/deleted_by_mod), creation/update timestamps.</li>
+                <li><span class="highlight">Membership data</span>: Epsu IDs you join/apply to, membership role (member/moderator/owner), membership status (active/invited/muted/left), join timestamps.</li>
+                <li><span class="highlight">Reaction data</span>: Posts you like/dislike, stored to hide reacted posts from your feed and calculate auto-deletion thresholds.</li>
+                <li><span class="highlight">Block author relationships</span>: Records of anonymous authors you block, stored to hide their future posts/replies from your feed.</li>
+            </ul>
 
-      <section class="doc-section">
-        <h2>7. Moderation and keyword screening</h2>
-        <p class="doc-body">
-          Epsu checks posts against a keyword list before release. Flagged posts may go into a moderator queue before they
-          become visible. Epsu also processes user reports, reaction signals, moderation actions, and 24-hour mutes.
-        </p>
-      </section>
+            <h3>3.3 Safety and Moderation Data</h3>
+            <ul>
+                <li><span class="highlight">Report data</span>: Posts you report, report reason, optional explanation, report status (open/resolved/rejected), timestamp.</li>
+                <li><span class="highlight">Moderation action data</span>: Records of actions taken against your content or account (post removal, mute, etc.), including actor profile ID, target profile ID, Epsu ID, post ID, action type, timestamp.</li>
+                <li><span class="highlight">Keyword-flagged post data</span>: If your post triggers our automated keyword safety filters, we store the flag reason and review status before release from the hourly queue.</li>
+            </ul>
 
-      <section class="doc-section">
-        <h2>8. Retention</h2>
-        <p class="doc-body">
-          Epsu is designed to keep community content short-lived. Posts are queued for hourly release and are deleted when
-          their scheduled cycle expires. Reactions and reports attached to deleted posts are removed with those posts.
-        </p>
-        <p class="doc-body">
-          Read notifications and resolved or rejected account requests can also be purged after age-based cleanup.
-        </p>
-        <p class="doc-body">
-          Account profile data is generally kept until you delete the account, unless longer retention is required by law.
-        </p>
-      </section>
+            <h3>3.4 Support and Account Request Data</h3>
+            <ul>
+                <li><span class="highlight">Account request data</span>: Type of request (correction, deletion issue, moderation appeal), message content, request status, creation/resolved timestamps.</li>
+                <li><span class="highlight">School application data</span>: For school Epsus, your short answer application content, application status, review timestamps.</li>
+            </ul>
 
-      <section class="doc-section">
-        <h2>9. Account deletion</h2>
-        <p class="doc-body">
-          Epsu provides an in-app account deletion flow. Deleting an account removes the auth account and profile-linked
-          records such as notifications, reactions, reports filed by that user, memberships, suggestions, school
-          applications, subscriptions, push tokens, and account requests.
-        </p>
-        <p class="doc-body">
-          Because post authors are de-linked rather than deleted immediately, a still-live post you submitted may stay in
-          the app without your account link until its normal deletion cycle ends.
-        </p>
-        <p class="doc-body">
-          You cannot delete your account while you still manage an Epsu.
-        </p>
-      </section>
+            <h3>3.5 Device and Usage Data</h3>
+            <ul>
+                <li><span class="highlight">Push tokens</span>: Unique device tokens for Expo push notifications, stored per profile with platform (iOS/Android), enabled flag, creation/last seen timestamps.</li>
+                <li><span class="highlight">Local storage data</span>: Auth session tokens, cached app data, post drafts, notification soft-prompt state, last push token, pending moderator invite tokens, runtime copies of posts/memberships/reports/block lists. Stored via AsyncStorage on your device.</li>
+                <li><span class="highlight">Usage data</span>: App opens, screen views, post composer opens, submission attempts, report submissions, notification opt-in events. Collected via in-app event tracking (no third-party analytics SDKs).</li>
+                <li><span class="highlight">Log data</span>: Supabase Auth login/logout events, database query logs, Edge Function (push delivery) error logs. Stored securely in Supabase.</li>
+            </ul>
+        </div>
 
-      <section class="doc-section">
-        <h2>10. Your rights</h2>
-        <p class="doc-body">
-          Depending on your location, you may have rights to access, correct, delete, restrict, export, or object to
-          certain processing. You may request help by emailing epsu.site@protonmail.com. We may need to verify your identity
-          before acting on a request.
-        </p>
-      </section>
+        <div class="legal-section" id="how-collected">
+            <h2>4. How We Collect Data</h2>
+            <p>We collect data through three primary methods:</p>
+            <ul>
+                <li><span class="highlight">Directly from you</span>: When you sign up, create posts, submit reports, apply to school Epsus, update settings, or contact support via email.</li>
+                <li><span class="highlight">Automatically via the Service</span>: When you use the app/website, we collect device data, usage data, and local storage data via Expo APIs, Supabase client SDK, and AsyncStorage.</li>
+                <li><span class="highlight">From third-party service providers</span>: Supabase provides Auth and database logs; Expo provides push notification delivery logs; Render provides static site access logs.</li>
+            </ul>
+            <p>We do not use third-party analytics SDKs (e.g., Google Analytics, Mixpanel) or advertising SDKs. We do not track you across third-party websites or apps.</p>
+        </div>
 
-      <section class="doc-section">
-        <h2>11. Children</h2>
-        <p class="doc-body">
-          Epsu is not for children under 13. We collect date of birth during signup to apply age-based account rules.
-        </p>
-      </section>
+        <div class="legal-section" id="legal-basis">
+            <h2>5. Legal Basis for Processing</h2>
+            <p>We process your personal data under the following legal bases per GDPR Article 6:</p>
+            <table class="table">
+                <tr>
+                    <th>Data Category</th>
+                    <th>Legal Basis</th>
+                </tr>
+                <tr>
+                    <td>Account Data</td>
+                    <td>Performance of a contract (GDPR Art. 6(1)(b)): To provide the Service you signed up for.</td>
+                </tr>
+                <tr>
+                    <td>Community/Content Data</td>
+                    <td>Performance of a contract (Art. 6(1)(b)) and Legitimate Interest (Art. 6(1)(f)): To operate the Service and maintain community safety.</td>
+                </tr>
+                <tr>
+                    <td>Safety/Moderation Data</td>
+                    <td>Legitimate Interest (Art. 6(1)(f)): To prevent harm, comply with legal obligations, and enforce our Terms.</td>
+                </tr>
+                <tr>
+                    <td>Support Request Data</td>
+                    <td>Performance of a contract (Art. 6(1)(b)) and Legal Obligation (Art. 6(1)(c)): To resolve your requests and comply with data protection laws.</td>
+                </tr>
+                <tr>
+                    <td>Device/Usage Data</td>
+                    <td>Consent (Art. 6(1)(a)): For optional push notifications and usage analytics; Legitimate Interest (Art. 6(1)(f)): To improve Service functionality.</td>
+                </tr>
+                <tr>
+                    <td>Cookie Data</td>
+                    <td>Consent (Art. 6(1)(a)): For strictly necessary cookies only.</td>
+                </tr>
+            </table>
+            <p>For sensitive personal data (e.g., date of birth for age verification), we rely on your explicit consent (GDPR Art. 9(2)(a)) or compliance with employment/social security law (Art. 9(2)(b)).</p>
+        </div>
 
-      <section class="doc-section">
-        <h2>12. Changes</h2>
-        <p class="doc-body">
-          We may update this Policy as the app changes. When we do, we will update the effective date on this page.
-        </p>
-      </section>
+        <div class="legal-section" id="processing-purposes">
+            <h2>6. Purposes of Processing</h2>
+            <p>We use your personal data for the following purposes:</p>
+            <ul>
+                <li>Account management: Create/delete accounts, authenticate users, reset passwords, update profile data.</li>
+                <li>Service operation: Process posts/replies/reactions, manage Epsu memberships, release hourly queued posts, apply auto-deletion thresholds.</li>
+                <li>Moderation and safety: Review reports, flag keyword-violating posts, block authors, mute users, remove content, maintain moderation records.</li>
+                <li>Notifications: Send optional push notifications for moderation updates, account activity, and invite redemptions via Expo.</li>
+                <li>Support: Respond to account requests, correction requests, and deletion appeals.</li>
+                <li>Analytics: Measure Service usage (app opens, post submissions, report rates) to improve functionality. No third-party analytics used.</li>
+                <li>Legal compliance: Comply with GDPR, DSA, COPPA, and other applicable laws, including responding to valid legal requests.</li>
+            </ul>
+        </div>
 
-      <section class="doc-section">
-        <h2>13. Contact</h2>
-        <p class="doc-body">
-          Privacy and data rights contact: epsu.site@protonmail.com.
-        </p>
-      </section>
+        <div class="legal-section" id="sharing-data">
+            <h2>7. Sharing of Personal Data</h2>
+            <p>We share your personal data only in the following limited circumstances:</p>
+            <h3>7.1 Service Providers</h3>
+            <p>We share data with trusted third-party service providers who process data on our behalf:</p>
+            <ul>
+                <li><span class="highlight">Supabase</span>: Processes Auth, Postgres database, Storage (school logos), and Edge Function (push delivery) data. Subject to Supabase's Data Processing Agreement (DPA) and GDPR compliance.</li>
+                <li><span class="highlight">Expo (Expo Application Services)</span>: Processes push notification tokens, delivery logs, and EAS build data. Subject to Expo's privacy policy and DPA.</li>
+                <li><span class="highlight">Render</span>: Hosts our static website (epsu.site) and processes basic access logs. Subject to Render's privacy policy.</li>
+            </ul>
+            <p>All service providers are contractually obligated to protect your data and only use it for the purposes we specify.</p>
 
-      <a class="back-link" href="/">Back to Epsu</a>
-    </main>
-  </body>
+            <h3>7.2 Legal Requirements</h3>
+            <p>We may disclose your personal data if required to do so by law or in response to valid requests by public authorities (e.g., court orders, government investigations).</p>
+
+            <h3>7.3 Business Transfers</h3>
+            <p>If Epsu is involved in a merger, acquisition, or sale of assets, your personal data may be transferred to the acquiring entity. We will notify you via email or in-app message before any such transfer.</p>
+
+            <h3>7.4 With Your Consent</h3>
+            <p>We may share data with third parties when you explicitly consent to such sharing (e.g., if we add optional third-party integrations in the future).</p>
+
+            <p>We do not sell your personal data to third parties for commercial purposes. We do not share data with advertisers, as we do not display third-party ads.</p>
+        </div>
+
+        <div class="legal-section" id="international-transfers">
+            <h2>8. International Data Transfers</h2>
+            <p>Your personal data is stored on Supabase servers, which may be located in the United States or other countries outside the European Economic Area (EEA). When transferring data from the EEA to a third country, we ensure adequate protection via:</p>
+            <ul>
+                <li>EU-U.S. Data Privacy Framework (DPF) adequacy decision for transfers to the US.</li>
+                <li>Standard Contractual Clauses (SCCs) approved by the European Commission, where DPF does not apply.</li>
+                <li>Supabase's GDPR-compliant data processing agreements, which include appropriate safeguards for international transfers.</li>
+            </ul>
+            <p>You may request a copy of the SCCs we use by contacting us at <a href="mailto:epsu.site@protonmail.com">epsu.site@protonmail.com</a>.</p>
+        </div>
+
+        <div class="legal-section" id="data-retention">
+            <h2>9. Data Retention</h2>
+            <p>We retain your personal data only for as long as necessary to fulfill the purposes outlined in this policy, unless a longer retention period is required by law:</p>
+            <table class="table">
+                <tr>
+                    <th>Data Type</th>
+                    <th>Retention Period</th>
+                </tr>
+                <tr>
+                    <td>Account Data</td>
+                    <td>Until account deletion, plus 30 days for backup recovery. Deleted accounts are anonymized in moderation records.</td>
+                </tr>
+                <tr>
+                    <td>Post Content</td>
+                    <td>Until the end of the post's lifecycle (temporary content model), then permanently deleted. If deleted by moderation, retained for 24 hours (mute duration) for processing. No 7-day appeal retention period is currently implemented in our migrations.</td>
+                </tr>
+                <tr>
+                    <td>Membership Data</td>
+                    <td>Until you leave an Epsu or delete your account, plus 30 days for backup recovery.</td>
+                </tr>
+                <tr>
+                    <td>Report/Moderation Data</td>
+                    <td>Retained for 12 months after resolution, or longer if required for legal compliance or safety investigations.</td>
+                </tr>
+                <tr>
+                    <td>Push Tokens</td>
+                    <td>Until you disable notifications, uninstall the app, or the token is marked invalid by Expo.</td>
+                </tr>
+                <tr>
+                    <td>Local Storage Data</td>
+                    <td>Stored on your device until you log out, delete the app, or clear AsyncStorage.</td>
+                </tr>
+            </table>
+            <p>Anonymity note: When you delete your account, your author link is removed from all live posts, which persist until their normal deletion cycle ends. Moderation records retain anonymized references to "deleted user" to preserve audit integrity.</p>
+        </div>
+
+        <div class="legal-section" id="your-rights">
+            <h2>10. Your Data Protection Rights</h2>
+            <p>Under GDPR and other applicable laws, you have the following rights regarding your personal data:</p>
+            <ul>
+                <li><span class="highlight">Right of access (Art. 15)</span>: Request a copy of the personal data we hold about you, including how it is processed.</li>
+                <li><span class="highlight">Right to rectification (Art. 16)</span>: Request correction of inaccurate or incomplete personal data.</li>
+                <li><span class="highlight">Right to erasure (Art. 17)</span>: Request deletion of your personal data ("right to be forgotten"), subject to legal retention requirements.</li>
+                <li><span class="highlight">Right to restriction of processing (Art. 18)</span>: Request that we restrict processing of your data in certain circumstances (e.g., if you contest accuracy).</li>
+                <li><span class="highlight">Right to data portability (Art. 20)</span>: Request a machine-readable copy of your personal data to transfer to another service provider.</li>
+                <li><span class="highlight">Right to object (Art. 21)</span>: Object to processing based on legitimate interest, including for direct marketing purposes.</li>
+                <li><span class="highlight">Right to withdraw consent (Art. 7(3))</span>: Withdraw your consent at any time, without affecting the lawfulness of processing before withdrawal.</li>
+                <li><span class="highlight">Right not to be subject to automated decision-making (Art. 22)</span>: We do not use fully automated decision-making with legal or similarly significant effects (e.g., fully automated account termination). Moderation decisions include human review.</li>
+            </ul>
+            <p>For EU users, you also have the right to lodge a complaint with your local data protection authority if you believe our processing violates GDPR.</p>
+        </div>
+
+        <div class="legal-section" id="exercising-rights">
+            <h2>11. Exercising Your Rights</h2>
+            <p>To exercise any of your data protection rights:</p>
+            <ul>
+                <li>Use the in-app Account History feature to view your posts, reactions, reports, memberships, and requests.</li>
+                <li>Use the in-app Delete Account feature (password confirmation required) to request erasure.</li>
+                <li>Email us at <a href="mailto:epsu.site@protonmail.com">epsu.site@protonmail.com</a> with your request, including your email address and a description of the right you wish to exercise.</li>
+                <li>For data portability, we will provide a JSON file containing your personal data within 30 days of your request.</li>
+            </ul>
+            <p>We will respond to your request within 30 days (or 60 days for complex requests, with notice). If we deny your request, we will provide a written explanation of the reason.</p>
+        </div>
+
+        <div class="legal-section" id="cookies">
+            <h2>12. Cookies and Similar Technologies</h2>
+            <p>Our static website (epsu.site) uses only strictly necessary cookies to function:</p>
+            <ul>
+                <li>Session cookies for Supabase Auth redirects (password reset, email confirmation).</li>
+                <li>No tracking cookies, analytics cookies, or advertising cookies are used.</li>
+                <li>You can disable cookies via your browser settings, but this may break Auth redirect functionality.</li>
+            </ul>
+            <p>Our mobile app does not use cookies. Local storage (AsyncStorage) is used only for app functionality, not tracking.</p>
+        </div>
+
+        <div class="legal-section" id="security">
+            <h2>13. Security of Personal Data</h2>
+            <p>We implement appropriate technical and organizational measures to protect your personal data against unauthorized access, alteration, disclosure, or destruction:</p>
+            <ul>
+                <li><span class="highlight">Encryption</span>: Supabase Auth uses bcrypt for password hashing; all data in transit is encrypted via TLS 1.2+; Supabase database data is encrypted at rest.</li>
+                <li><span class="highlight">Access controls</span>: Backend authority is enforced via Supabase Row Level Security (RLS) policies, RPC functions, and Edge Function secret checks. Only authorized personnel have access to raw data.</li>
+                <li><span class="highlight">Anonymity protections</span>: Author IDs are never exposed to ordinary users; moderation data is scoped to assigned Epsus only.</li>
+                <li><span class="highlight">Incident response</span>: We maintain a written incident response plan for data breaches, including notification to supervisory authorities within 72 hours per GDPR Art. 33.</li>
+            </ul>
+            <p>No method of transmission over the internet or electronic storage is 100% secure. We cannot guarantee absolute security, but we continuously update our safeguards to meet industry standards.</p>
+        </div>
+
+        <div class="legal-section" id="children-privacy">
+            <h2>14. Children's Privacy</h2>
+            <p>We do not knowingly collect personal data from children under the age of 13 (or the minimum age required by your jurisdiction, whichever is higher). For EU users, we do not collect data from children under 16 without verifiable parental consent.</p>
+            <p>If we become aware that we have collected personal data from a child without parental consent, we will delete such data immediately. If you believe a child has provided us personal data, please contact us at <a href="mailto:epsu.site@protonmail.com">epsu.site@protonmail.com</a>.</p>
+        </div>
+
+        <div class="legal-section" id="third-party">
+            <h2>15. Third-Party Services</h2>
+            <p>The Service integrates with third-party services as described in Section 7.1. We are not responsible for the privacy practices of these providers. We encourage you to review their privacy policies:</p>
+            <ul>
+                <li>Supabase: <a href="https://supabase.com/privacy">https://supabase.com/privacy</a></li>
+                <li>Expo: <a href="https://expo.dev/privacy">https://expo.dev/privacy</a></li>
+                <li>Render: <a href="https://render.com/privacy">https://render.com/privacy</a></li>
+            </ul>
+        </div>
+
+        <div class="legal-section" id="changes">
+            <h2>16. Changes to This Privacy Policy</h2>
+            <p>We may update this Privacy Policy from time to time to reflect changes in our practices, applicable law (e.g., GDPR/DSA updates), or Service features. We will notify you of material changes by:</p>
+            <ul>
+                <li>Posting the updated policy on epsu.site with a new "Last Updated" date.</li>
+                <li>Sending an in-app notification or email to your registered address.</li>
+            </ul>
+            <p>Your continued use of the Service after the effective date of the updated policy constitutes your acceptance of the changes. If you do not agree, you must delete your account and stop using the Service.</p>
+        </div>
+
+        <div class="legal-section" id="contact">
+            <h2>17. Contact Information</h2>
+            <p>For questions about this Privacy Policy or your personal data, contact us at:</p>
+            <p>Email: <a href="mailto:epsu.site@protonmail.com">epsu.site@protonmail.com</a><br>
+            Postal Address: [To be added upon Estonian company formation]</p>
+        </div>
+
+        <div class="legal-section" id="eu-supplementary">
+            <h2>18. Supplementary Terms for EU/EEA Users</h2>
+            <p>If you are a resident of the EU/EEA, the following additional terms apply per DSA 2024:</p>
+            <ul>
+                <li>We provide a clear, user-friendly reporting mechanism for illegal content in the app and on epsu.site.</li>
+                <li>We process illegal content reports within 24-48 hours, and provide you with a written statement of reasons if we take action against your content or account.</li>
+                <li>We do not use automated moderation for decisions that result in account termination or permanent content removal; all such decisions include human review by moderators/owners/admins.</li>
+                <li>You have the right to appeal moderation decisions via email to <a href="mailto:epsu.site@protonmail.com">epsu.site@protonmail.com</a> within 7 days of the decision.</li>
+                <li>We publish an annual transparency report (once user base exceeds 10,000 MAU) detailing content moderation actions, as required by DSA.</li>
+            </ul>
+        </div>
+
+        <div class="legal-section" id="dpo">
+            <h2>19. Data Protection Officer</h2>
+            <p>We have appointed a Data Protection Officer (DPO) to oversee compliance with this Privacy Policy and GDPR requirements:</p>
+            <p>Email: <a href="mailto:epsu.site@protonmail.com">epsu.site@protonmail.com</a> (attn: DPO)</p>
+            <p>If we have not formally appointed a DPO due to company formation status, the above email will be handled by our privacy team.</p>
+        </div>
+    </div>
+</body>
 </html>

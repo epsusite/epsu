@@ -2,7 +2,7 @@
 
 ## 1. Scope
 
-This masterplan consolidates the non-legal Epsu materials: `TECHNICAL_REPORT.md`, `site/epsu-master-report.html`, `site/system-report.html`, `site/whitepaper.html`, `ANALYTICS_PLAN.md`, `BUSINESS_TODO.md`, and `LAUNCH_CHECKLIST.md`. It excludes legal and policy texts such as terms, privacy, guidelines, and host policy wording. The purpose is to convert the technical reports, whitepaper direction, launch thinking, analytics plan, and business notes into one execution document.
+This masterplan consolidates the non-legal Epsu materials: `TECHNICAL_REPORT.md`, `site/epsu-master-report.html`, `site/system-report.html`, `ANALYTICS_PLAN.md`, `BUSINESS_TODO.md`, and `LAUNCH_CHECKLIST.md`. It excludes legal and policy texts such as terms, privacy, guidelines, and host policy wording. The purpose is to convert the technical reports, launch thinking, analytics plan, and business notes into one execution document.
 
 The longest source is `TECHNICAL_REPORT.md`, at 44,219 bytes. The final target is a masterplan above 88,438 bytes. This file is written as a practical operating plan: what Epsu is, how it should work, what must be built, what must be measured, what must be delayed, and how technical work connects to product and business direction.
 
@@ -890,11 +890,9 @@ Any leaked token should be rotated. Any broken authorization path should get a n
 
 ## 61. Documentation
 
-Documentation should be split by audience. Internal technical documentation should describe schema, RPCs, RLS policies, Edge Functions, Storage buckets, deployment, environment variables, testing flows, and operational procedures. Product documentation should describe what Epsu is, how communities work, how school applications work, how hosts and moderators operate, and how launch metrics are interpreted. Public-facing whitepaper material should be shorter, clearer, and less implementation-heavy than this masterplan.
+Documentation should be split by audience. Internal technical documentation should describe schema, RPCs, RLS policies, Edge Functions, Storage buckets, deployment, environment variables, testing flows, and operational procedures. Product documentation should describe what Epsu is, how communities work, how school applications work, how hosts and moderators operate, and how launch metrics are interpreted.
 
 Existing technical reports should be treated as historical snapshots. They are useful because they show how the system was understood at a point in time, but they should not be the only source of truth after backend changes. This masterplan should become the execution reference. If the app behavior changes, the masterplan should be updated or superseded.
-
-The placeholder whitepaper page should eventually become a real external-facing product thesis. It should explain local structure, anonymous participation, bounded moderation, school communities, regional communities, and launch philosophy. It should not include internal security details, raw implementation notes, or sensitive operational plans.
 
 ## 62. Public Site Direction
 
@@ -903,7 +901,6 @@ The public site should stay static unless there is a clear need for dynamic beha
 The public site should have:
 
 - A clear homepage.
-- A real whitepaper or product thesis.
 - Invite landing pages.
 - A lightweight system or status explanation if useful.
 - Contact information.
@@ -1203,20 +1200,6 @@ App store readiness should focus on working account flows, support contact, priv
 The app should be tested through development builds before external release. Push notifications require proper Expo configuration and native rebuilds when notification modules change.
 
 App store review may ask about user-generated content, moderation, reporting, blocking/muting, and account deletion. The product should be ready operationally, not just textually.
-
-## 87. Whitepaper Direction
-
-The public whitepaper should be rewritten separately from this internal plan. It should be concise and strategic:
-
-- Local anonymous communities.
-- Schools and regions.
-- Public anonymity with backend accountability.
-- Reports, moderators, hosts, admins.
-- Small launch philosophy.
-- Governance before monetization.
-- Analytics-guided expansion.
-
-It should not include every table, RPC, or deployment detail. A whitepaper is for product belief and direction. This masterplan is for execution.
 
 ## 88. Technical Debt
 
@@ -1786,7 +1769,6 @@ Epsu should explicitly reject several paths during the current stage:
 - Do not add complex company structure before obligations exist.
 - Do not replace Supabase just because a custom backend sounds mature.
 - Do not treat legal pages as product validation.
-- Do not treat a whitepaper as traction.
 
 Anti-goals are useful because they protect focus.
 

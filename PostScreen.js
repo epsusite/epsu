@@ -1,8 +1,9 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as WebBrowser from 'expo-web-browser';
 import {
   Animated,
+  ImageBackground,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -10,26 +11,45 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  StatusBar,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { TouchableOpacity } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Path } from 'react-native-svg';
+import AppCheckboxRow from './components/AppCheckboxRow';
 import { showAppDialog } from './components/AppDialog';
 import { detectFlaggedKeywords } from './lib/flaggedPostKeywords';
 import { fetchEpsuPostQuota } from './lib/api/feed';
 import { getSchoolLogoUrl } from './lib/schoolLogo';
+import { UI } from './lib/uiTheme';
 import useSubmitButtonAnimation from './lib/useSubmitButtonAnimation';
 
-const TITLE_MIN_LENGTH = 10;
+const TITLE_MIN_LENGTH = 2;
 const TITLE_MAX_LENGTH = 100;
-const BODY_MIN_LENGTH = 10;
+const BODY_MIN_LENGTH = 2;
 const BODY_MAX_LENGTH = 1000;
-const POST_DRAFT_KEY = 'post_screen_draft';
+const POST_DRAFT_KEY_PREFIX = 'post_screen_draft_v2';
 const GUIDELINES_URL = 'https://epsu.site/guidelines';
 const POST_MASCOT_IMAGE = require('./assets/images/1000133182.png');
+const MASCOT_HEAD_ANCHOR_X_RATIO = 0.36;
+const MASCOT_HEAD_ANCHOR_Y_RATIO = 0.24;
+
+function getPostDraftKey({ currentUserId, isGuestMode }) {
+  if (isGuestMode) {
+    return `${POST_DRAFT_KEY_PREFIX}:guest`;
+  }
+
+  if (currentUserId) {
+    return `${POST_DRAFT_KEY_PREFIX}:${currentUserId}`;
+  }
+
+  return `${POST_DRAFT_KEY_PREFIX}:anonymous`;
+}
 
 function logPostSubmitTiming(label, startedAt) {
   const durationMs = Date.now() - startedAt;
@@ -37,10 +57,6 @@ function logPostSubmitTiming(label, startedAt) {
 }
 
 function getCounterText(length, minLength, maxLength) {
-  if (length < minLength) {
-    return `${length}/${minLength}`;
-  }
-
   return `${length}/${maxLength}`;
 }
 
@@ -92,7 +108,7 @@ function EpsuPickerItem({ item, isSelected, onPress }) {
         {logoUrl ? (
           <Image source={{ uri: logoUrl }} style={styles.epsuIconImage} contentFit="cover" />
         ) : (
-          <Text style={styles.epsuIconText}>{item.code}</Text>
+          <View style={[styles.epsuIconPlaceholder, isSelected && styles.epsuIconPlaceholderSelected]} />
         )}
       </View>
       <View style={styles.epsuTextWrap}>
@@ -100,19 +116,6 @@ function EpsuPickerItem({ item, isSelected, onPress }) {
         <Text style={[styles.epsuMeta, isSelected && styles.epsuMetaSelected]}>Post to this Epsu</Text>
       </View>
     </TouchableOpacity>
-  );
-}
-
-function CheckboxRow({ checked, children, onPress }) {
-  return (
-    <Pressable style={styles.checkboxRow} onPress={onPress}>
-      <View style={[styles.checkboxBox, checked && styles.checkboxBoxChecked]}>
-        {checked ? <Text style={styles.checkboxTick}>✓</Text> : null}
-      </View>
-      <View style={styles.checkboxContent}>
-        <Text style={styles.checkboxText}>{children}</Text>
-      </View>
-    </Pressable>
   );
 }
 
@@ -124,8 +127,13 @@ export default function PostScreen({
   hasAcceptedCommunityGuidelines,
   epsus,
   userMemberships,
+  currentUserId,
+  isGuestMode = false,
+  onGuestLockedAction,
+  currentCountryCode,
 }) {
   const insets = useSafeAreaInsets();
+  const { width: windowWidth, height: windowHeight, fontScale } = useWindowDimensions();
   const handledReplyNonce = useRef(null);
   const mascotOffset = useRef(new Animated.Value(0)).current;
   const mascotOpacity = useRef(new Animated.Value(1)).current;
@@ -142,7 +150,14 @@ export default function PostScreen({
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [postQuota, setPostQuota] = useState(null);
+  const [mascotBubbleLayout, setMascotBubbleLayout] = useState({ width: 140, height: 42 });
   const accessibleEpsus = useMemo(() => {
+    if (isGuestMode) {
+      return epsus.filter(
+        (epsu) => epsu.review_status === 'approved' && epsu.country_code === currentCountryCode
+      );
+    }
+
     const membershipByEpsuId = userMemberships.reduce((accumulator, membership) => {
       accumulator[membership.epsuId] = membership;
       return accumulator;
@@ -150,9 +165,9 @@ export default function PostScreen({
 
     return epsus.filter((epsu) => {
       const membership = membershipByEpsuId[epsu.id];
-      return membership?.status === 'active' && epsu.review_status === 'approved';
+      return ['active', 'muted'].includes(membership?.status) && epsu.review_status === 'approved';
     });
-  }, [epsus, userMemberships]);
+  }, [currentCountryCode, epsus, isGuestMode, userMemberships]);
   const filteredEpsus = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
     const baseEpsus = normalizedQuery
@@ -162,24 +177,77 @@ export default function PostScreen({
     return baseEpsus.filter((epsu) => epsu.id !== selectedEpsuId);
   }, [accessibleEpsus, searchQuery, selectedEpsuId]);
   const selectedEpsu = accessibleEpsus.find((epsu) => epsu.id === selectedEpsuId) ?? null;
+  const hasNoJoinedEpsus = !isGuestMode && accessibleEpsus.length === 0;
+  const selectedMembership = userMemberships.find((membership) => membership.epsuId === selectedEpsuId) ?? null;
   const titleLength = getMeaningfulLength(title);
   const bodyLength = getMeaningfulLength(body);
   const isReplyMode = Boolean(activeReplyToPostId);
+  const isMutedSubmitBlock = selectedMembership?.status === 'muted';
 
   const isTitleReady = titleLength >= TITLE_MIN_LENGTH;
   const isBodyReady = bodyLength >= BODY_MIN_LENGTH;
-  const canSubmit = isTitleReady && isBodyReady && !!selectedEpsuId && !isSubmitting;
+  const hasValidSelectedEpsu = Boolean(selectedEpsu);
+  const canSubmit = isTitleReady && isBodyReady && hasValidSelectedEpsu && !isSubmitting && !isMutedSubmitBlock;
   const submitAnimationStyle = useSubmitButtonAnimation(canSubmit);
   const shouldHideMascot = keyboardHeight > 0 || isInputFocused;
-  const mascotRestingOffset = selectedEpsuId ? 128 : 0;
   const quotaCountdown = formatCountdown(postQuota?.resetsAt);
+  const isCompactMascot = windowWidth < 380 || fontScale > 1.1;
+  const mascotImageWidth = Math.round(
+    Math.max(104, Math.min(isCompactMascot ? 132 : 168, windowWidth * (isCompactMascot ? 0.3 : 0.36)))
+  );
+  const mascotImageHeight = Math.round(mascotImageWidth * (1755 / 1080));
+  const mascotBubbleMaxWidth = Math.round(
+    Math.max(112, Math.min(isCompactMascot ? 142 : 176, windowWidth * (isCompactMascot ? 0.32 : 0.38)))
+  );
+  const mascotGap = isCompactMascot ? 4 : 8;
+  const mascotRightOffset = Math.max(10, Math.min(22, Math.round(windowWidth * 0.045)));
+  const mascotBottomOffset = insets.bottom + Math.max(68, Math.min(96, Math.round(windowHeight * 0.1)));
+  const mascotRestingOffset = hasValidSelectedEpsu ? Math.round(mascotImageHeight * 0.72) : 0;
+  const mascotHiddenOffset = Math.round(mascotImageHeight + Math.max(44, Math.min(88, windowHeight * 0.08)));
+  const mascotBubbleMarginBottom = Math.max(12, Math.round(mascotImageHeight * 0.1));
+  const mascotHeadAnchor = useMemo(
+    () => ({
+      x: Math.round(mascotImageWidth * MASCOT_HEAD_ANCHOR_X_RATIO),
+      y: Math.round(mascotImageHeight * MASCOT_HEAD_ANCHOR_Y_RATIO),
+    }),
+    [mascotImageHeight, mascotImageWidth]
+  );
+  const mascotTail = useMemo(() => {
+    const bubbleWidth = mascotBubbleLayout.width || 140;
+    const bubbleHeight = mascotBubbleLayout.height || 42;
+    const bubbleTop = mascotImageHeight - mascotBubbleMarginBottom - bubbleHeight;
+    const startX = bubbleWidth - 6;
+    const startY = bubbleTop + bubbleHeight * 0.64;
+    const targetX = bubbleWidth + mascotGap + mascotHeadAnchor.x - 6;
+    const targetY = mascotHeadAnchor.y;
+    const deltaX = targetX - startX;
+    const deltaY = targetY - startY;
+    const distance = Math.max(18, Math.sqrt(deltaX * deltaX + deltaY * deltaY));
+    const angleDeg = (Math.atan2(deltaY, deltaX) * 180) / Math.PI;
+    const length = Math.max(18, Math.round(distance * 0.62));
+    const thickness = Math.max(18, Math.round(mascotImageWidth * 0.12));
+    const endX = startX + Math.cos((angleDeg * Math.PI) / 180) * length;
+    const endY = startY + Math.sin((angleDeg * Math.PI) / 180) * length;
+
+    return {
+      width: length,
+      height: thickness,
+      left: (startX + endX) / 2 - length / 2,
+      top: (startY + endY) / 2 - thickness / 2,
+      angleDeg,
+    };
+  }, [mascotBubbleLayout.height, mascotBubbleLayout.width, mascotBubbleMarginBottom, mascotGap, mascotHeadAnchor.x, mascotHeadAnchor.y, mascotImageHeight, mascotImageWidth]);
+  const postDraftKey = useMemo(
+    () => getPostDraftKey({ currentUserId, isGuestMode }),
+    [currentUserId, isGuestMode]
+  );
 
   useEffect(() => {
     let isActive = true;
 
     const restoreDraft = async () => {
       try {
-        const rawDraft = await AsyncStorage.getItem(POST_DRAFT_KEY);
+        const rawDraft = await AsyncStorage.getItem(postDraftKey);
         if (!rawDraft || !isActive) {
           return;
         }
@@ -201,11 +269,11 @@ export default function PostScreen({
     return () => {
       isActive = false;
     };
-  }, []);
+  }, [postDraftKey]);
 
   useEffect(() => {
     AsyncStorage.setItem(
-      POST_DRAFT_KEY,
+      postDraftKey,
       JSON.stringify({
         title,
         body,
@@ -215,7 +283,7 @@ export default function PostScreen({
         activeReplyTitle,
       })
     ).catch(() => {});
-  }, [activeReplyTitle, activeReplyToPostId, body, searchQuery, selectedEpsuId, title]);
+  }, [activeReplyTitle, activeReplyToPostId, body, postDraftKey, searchQuery, selectedEpsuId, title]);
 
   useEffect(() => {
     const handleKeyboardShow = (event) => {
@@ -239,7 +307,7 @@ export default function PostScreen({
   useEffect(() => {
     Animated.parallel([
       Animated.spring(mascotOffset, {
-        toValue: shouldHideMascot ? 240 : mascotRestingOffset,
+        toValue: shouldHideMascot ? mascotHiddenOffset : mascotRestingOffset,
         tension: 54,
         friction: 8,
         useNativeDriver: true,
@@ -250,7 +318,19 @@ export default function PostScreen({
         useNativeDriver: true,
       }),
     ]).start();
-  }, [mascotOffset, mascotOpacity, mascotRestingOffset, shouldHideMascot]);
+  }, [mascotHiddenOffset, mascotOffset, mascotOpacity, mascotRestingOffset, shouldHideMascot]);
+
+  useEffect(() => {
+    if (!selectedEpsuId) {
+      return;
+    }
+
+    const stillAccessible = accessibleEpsus.some((epsu) => epsu.id === selectedEpsuId);
+    if (!stillAccessible) {
+      setSelectedEpsuId(null);
+      setPostQuota(null);
+    }
+  }, [accessibleEpsus, selectedEpsuId]);
 
   useEffect(() => {
     if (!selectedEpsuId) {
@@ -391,7 +471,7 @@ export default function PostScreen({
       return;
     }
 
-    await AsyncStorage.removeItem(POST_DRAFT_KEY).catch(() => {});
+    await AsyncStorage.removeItem(postDraftKey).catch(() => {});
     navigation.setParams({
       replyNonce: undefined,
       replyTitle: undefined,
@@ -411,6 +491,11 @@ export default function PostScreen({
         '[post-submit] handleSubmit blocked',
         `canSubmit=${canSubmit} isSubmitting=${isSubmitting} epsuId=${selectedEpsuId ?? 'none'} titleLength=${titleLength} bodyLength=${bodyLength}`
       );
+      return;
+    }
+
+    if (isGuestMode) {
+      onGuestLockedAction?.();
       return;
     }
 
@@ -486,6 +571,35 @@ export default function PostScreen({
     setPendingSubmitOptions(null);
   };
 
+  if (hasNoJoinedEpsus) {
+    return (
+      <View style={styles.emptyScreen}>
+        <ImageBackground
+          source={require('./assets/images/1774535505571.jpg')}
+          style={styles.emptyBg}
+          resizeMode="cover"
+        >
+          <StatusBar barStyle="light-content" />
+          <View
+            style={[
+              styles.emptyOverlay,
+              { paddingBottom: insets.bottom + UI.auth.screenPaddingBottom + 40 },
+            ]}
+          >
+            <View style={styles.emptyInner}>
+              <Text style={styles.emptyTitle}>Become a member</Text>
+              <View style={styles.emptyTextWrap}>
+                <Text style={styles.emptyText}>
+                  You currently aren&apos;t a member of any Epsu yet. Join one now in the Home menu to make your first post here
+                </Text>
+              </View>
+            </View>
+          </View>
+        </ImageBackground>
+      </View>
+    );
+  }
+
   return (
     <KeyboardAvoidingView
       style={styles.screen}
@@ -501,6 +615,12 @@ export default function PostScreen({
         <View style={styles.section}>
           <Text style={styles.sectionEyebrow}>Write a post</Text>
           <Text style={styles.sectionTitle}>Which Epsu to post?</Text>
+          {isMutedSubmitBlock ? (
+            <View style={styles.mutedNoticeCard}>
+              <Text style={styles.mutedNoticeTitle}>You are muted here for 24 hours</Text>
+              <Text style={styles.mutedNoticeText}>You can still react and use your role tools, but you cannot submit posts in this Epsu right now</Text>
+            </View>
+          ) : null}
           <TextInput
             style={styles.searchInput}
             placeholder={
@@ -516,6 +636,8 @@ export default function PostScreen({
             editable={!isReplyMode}
             onFocus={handleInputFocus}
             onBlur={handleInputBlur}
+            returnKeyType="done"
+            onSubmitEditing={() => Keyboard.dismiss()}
           />
           {selectedEpsu ? (
             <View style={styles.selectedWrap}>
@@ -571,6 +693,8 @@ export default function PostScreen({
                 onChangeText={handleTitleChange}
                 onFocus={handleInputFocus}
                 onBlur={handleInputBlur}
+                returnKeyType="done"
+                onSubmitEditing={() => Keyboard.dismiss()}
               />
             </>
           )}
@@ -590,10 +714,13 @@ export default function PostScreen({
             onBlur={handleInputBlur}
             multiline
             textAlignVertical="top"
+            returnKeyType="done"
+            blurOnSubmit
+            onSubmitEditing={() => Keyboard.dismiss()}
           />
         </View>
 
-        {selectedEpsuId && postQuota ? (
+        {hasValidSelectedEpsu && postQuota ? (
           <Text style={styles.quotaText}>
             {postQuota.postsLeft} posts left, {postQuota.repliesLeft} replies left until {quotaCountdown}
           </Text>
@@ -605,25 +732,79 @@ export default function PostScreen({
         style={[
           styles.mascotWrap,
           {
-            bottom: insets.bottom + 72,
+            right: mascotRightOffset,
+            bottom: mascotBottomOffset,
             opacity: mascotOpacity,
-            transform: [
-              { translateY: mascotOffset },
-              { translateX: selectedEpsuId ? 6 : 0 },
-            ],
+            transform: [{ translateY: mascotOffset }],
           },
         ]}
       >
-          <View style={styles.mascotBubble}>
-            <Text style={styles.mascotBubbleText}>I&apos;m watching you! :3</Text>
-            <View style={styles.mascotBubbleTail} />
+        <View
+          style={[
+            styles.mascotRow,
+            {
+              gap: mascotGap,
+            },
+          ]}
+        >
+            <View
+              style={[
+                styles.mascotBubble,
+              {
+                maxWidth: mascotBubbleMaxWidth,
+                marginBottom: mascotBubbleMarginBottom,
+              },
+            ]}
+            onLayout={(event) => {
+              const { width, height } = event.nativeEvent.layout;
+              setMascotBubbleLayout((current) =>
+                current.width === width && current.height === height
+                  ? current
+                  : { width, height }
+              );
+            }}
+          >
+            <Text allowFontScaling={false} style={styles.mascotBubbleText}>I&apos;m watching you! :3</Text>
           </View>
+          <Svg
+            pointerEvents="none"
+            style={[
+              styles.mascotBubbleTail,
+              {
+                width: mascotTail.width,
+                height: mascotTail.height,
+                left: mascotTail.left,
+                top: mascotTail.top,
+                transform: [{ rotate: `${mascotTail.angleDeg}deg` }],
+              },
+            ]}
+            viewBox={`0 0 ${mascotTail.width} ${mascotTail.height}`}
+          >
+            <Path
+              d={`M 0 ${mascotTail.height * 0.22}
+                  Q ${mascotTail.width * 0.22} 0 ${mascotTail.width * 0.56} ${mascotTail.height * 0.18}
+                  Q ${mascotTail.width * 0.84} ${mascotTail.height * 0.3} ${mascotTail.width} ${mascotTail.height * 0.5}
+                  Q ${mascotTail.width * 0.84} ${mascotTail.height * 0.7} ${mascotTail.width * 0.56} ${mascotTail.height * 0.82}
+                  Q ${mascotTail.width * 0.22} ${mascotTail.height} 0 ${mascotTail.height * 0.78} Z`}
+              fill="#ffffff"
+              stroke="#20131a"
+              strokeWidth="3"
+              strokeLinejoin="round"
+            />
+          </Svg>
           <Image
             source={POST_MASCOT_IMAGE}
-            style={styles.mascotImage}
+            style={[
+              styles.mascotImage,
+              {
+                width: mascotImageWidth,
+                height: mascotImageHeight,
+              },
+            ]}
             contentFit="contain"
             contentPosition="right bottom"
           />
+        </View>
       </Animated.View>
 
       <Animated.View
@@ -661,7 +842,7 @@ export default function PostScreen({
             <Text style={styles.guidelinesText}>
               Before your first post, confirm that you have read Epsu&apos;s Community Guidelines
             </Text>
-            <CheckboxRow
+            <AppCheckboxRow
               checked={acceptedGuidelinesLocally}
               onPress={() => setAcceptedGuidelinesLocally((current) => !current)}
             >
@@ -669,7 +850,7 @@ export default function PostScreen({
               <Text style={styles.inlineLink} onPress={handleOpenGuidelines}>
                 Community Guidelines
               </Text>
-            </CheckboxRow>
+            </AppCheckboxRow>
             <View style={styles.guidelinesModalActions}>
               <Pressable
                 style={styles.buttonSlot}
@@ -708,6 +889,41 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff8fb',
   },
+  emptyScreen: {
+    flex: 1,
+    backgroundColor: '#e52b50',
+  },
+  emptyBg: {
+    flex: 1,
+  },
+  emptyOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  emptyInner: {
+    marginHorizontal: UI.auth.horizontalPadding,
+  },
+  emptyTitle: {
+    fontSize: UI.auth.titleSize,
+    fontWeight: '900',
+    color: '#fff',
+    marginBottom: UI.auth.titleSpacing,
+    letterSpacing: -0.5,
+  },
+  emptyTextWrap: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#e52b50',
+    borderRadius: 24,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    maxWidth: 340,
+  },
+  emptyText: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: '#fff',
+    fontWeight: '700',
+  },
   content: {
     paddingHorizontal: 18,
     flexGrow: 1,
@@ -735,78 +951,43 @@ const styles = StyleSheet.create({
   selectedWrap: {
     gap: 8,
   },
-  checkboxRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    paddingTop: 4,
-  },
-  checkboxBox: {
-    width: 22,
-    height: 22,
-    borderRadius: 7,
-    borderWidth: 1.5,
-    borderColor: '#f0b7ca',
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 2,
-  },
-  checkboxBoxChecked: {
-    backgroundColor: '#e52b50',
-    borderColor: '#e52b50',
-  },
-  checkboxTick: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '900',
-    lineHeight: 16,
-  },
-  checkboxText: {
-    fontSize: 15,
-    lineHeight: 22,
-    color: '#20131a',
-  },
-  checkboxContent: {
-    flex: 1,
-  },
   inlineLink: {
     color: '#e52b50',
     fontWeight: '800',
   },
   guidelinesModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(32, 19, 26, 0.34)',
+    backgroundColor: UI.colors.overlay,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: UI.modal.overlayPadding,
   },
   guidelinesModalCard: {
     width: '100%',
-    maxWidth: 360,
-    borderRadius: 22,
-    backgroundColor: '#fff',
+    maxWidth: UI.modal.maxWidth,
+    borderRadius: UI.radius.modal,
+    backgroundColor: UI.colors.surface,
     borderWidth: 1,
-    borderColor: '#f2d8e0',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
+    borderColor: UI.colors.border,
+    paddingHorizontal: UI.spacing.modal,
+    paddingTop: UI.spacing.modal,
+    paddingBottom: UI.spacing.card,
     gap: 14,
   },
   guidelinesModalTitle: {
-    fontSize: 20,
+    fontSize: UI.modal.titleSize,
     fontWeight: '900',
-    color: '#e52b50',
+    color: UI.colors.primary,
   },
   guidelinesText: {
-    fontSize: 15,
-    lineHeight: 22,
-    color: '#6d4f5c',
+    fontSize: UI.modal.bodySize,
+    lineHeight: UI.modal.bodyLineHeight,
+    color: UI.colors.textMuted,
   },
   guidelinesModalActions: {
     flexDirection: 'row',
     alignItems: 'stretch',
-    gap: 10,
+    gap: UI.spacing.gap - 2,
     marginTop: 6,
   },
   buttonSlot: {
@@ -814,30 +995,30 @@ const styles = StyleSheet.create({
   },
   guidelinesModalButton: {
     width: '100%',
-    minHeight: 44,
-    borderRadius: 14,
-    backgroundColor: '#e52b50',
+    minHeight: UI.modal.buttonMinHeight,
+    borderRadius: UI.radius.button,
+    backgroundColor: UI.colors.primary,
     paddingHorizontal: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   guidelinesModalButtonSecondary: {
-    backgroundColor: '#fff',
+    backgroundColor: UI.colors.surface,
     borderWidth: 1,
-    borderColor: '#efbcc9',
+    borderColor: UI.colors.border,
   },
   guidelinesModalButtonDisabled: {
-    backgroundColor: '#efbcc9',
+    backgroundColor: UI.colors.border,
   },
   guidelinesModalButtonText: {
-    color: '#fff',
+    color: UI.colors.surface,
     fontSize: 14,
     fontWeight: '900',
     letterSpacing: 0.3,
     textAlign: 'center',
   },
   guidelinesModalButtonSecondaryText: {
-    color: '#e52b50',
+    color: UI.colors.primary,
   },
   selectedLabel: {
     fontSize: 13,
@@ -856,6 +1037,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     fontSize: 15,
     color: '#24171d',
+  },
+  mutedNoticeCard: {
+    backgroundColor: '#fff1f4',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#f2bcc8',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 14,
+  },
+  mutedNoticeTitle: {
+    color: '#20131a',
+    fontSize: 15,
+    fontWeight: '900',
+    marginBottom: 4,
+  },
+  mutedNoticeText: {
+    color: '#7f6170',
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '600',
   },
   searchHint: {
     fontSize: 14,
@@ -891,10 +1093,14 @@ const styles = StyleSheet.create({
   epsuIconSelected: {
     backgroundColor: '#fff',
   },
-  epsuIconText: {
-    color: '#e52b50',
-    fontSize: 15,
-    fontWeight: '900',
+  epsuIconPlaceholder: {
+    width: 18,
+    height: 18,
+    borderRadius: 999,
+    backgroundColor: '#e52b50',
+  },
+  epsuIconPlaceholderSelected: {
+    backgroundColor: '#e52b50',
   },
   epsuTextWrap: {
     flex: 1,
@@ -987,18 +1193,14 @@ const styles = StyleSheet.create({
   },
   mascotWrap: {
     position: 'absolute',
-    right: -6,
-    width: 206,
-    height: 224,
-    alignItems: 'flex-end',
-    justifyContent: 'flex-end',
     zIndex: 1,
   },
+  mascotRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    position: 'relative',
+  },
   mascotBubble: {
-    position: 'absolute',
-    top: 28,
-    left: -66,
-    maxWidth: 150,
     borderRadius: 18,
     backgroundColor: '#ffffff',
     borderWidth: 3,
@@ -1020,19 +1222,9 @@ const styles = StyleSheet.create({
   },
   mascotBubbleTail: {
     position: 'absolute',
-    right: 12,
-    bottom: 10,
-    width: 16,
-    height: 16,
-    backgroundColor: '#ffffff',
-    borderRightWidth: 3,
-    borderBottomWidth: 3,
-    borderColor: '#20131a',
-    transform: [{ rotate: '-18deg' }],
+    zIndex: 2,
   },
   mascotImage: {
-    width: 190,
-    height: 208,
     zIndex: 1,
   },
   submitButton: {
@@ -1056,4 +1248,5 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
 });
+
 

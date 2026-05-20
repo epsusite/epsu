@@ -1,23 +1,41 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   TextInput,
   StyleSheet,
   ImageBackground,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   StatusBar,
+  useWindowDimensions,
 } from 'react-native';
 import { TouchableOpacity } from 'react-native-gesture-handler';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import GuestModeBubble from './components/GuestModeBubble';
+import { UI } from './lib/uiTheme';
 
+const MIN_PASSWORD_LENGTH = 8;
 const MAX_PASSWORD_LENGTH = 64;
 
-export default function LoginScreen({ navigation, onLogin }) {
+export default function LoginScreen({ navigation, onLogin, showGuestModeBubble = true }) {
+  const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', () => setIsKeyboardVisible(true));
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => setIsKeyboardVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const validate = () => {
     let valid = true;
@@ -34,6 +52,9 @@ export default function LoginScreen({ navigation, onLogin }) {
 
     if (!password) {
       setPasswordError('Password is required');
+      valid = false;
+    } else if (password.length < MIN_PASSWORD_LENGTH) {
+      setPasswordError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
       valid = false;
     } else {
       setPasswordError('');
@@ -72,9 +93,28 @@ export default function LoginScreen({ navigation, onLogin }) {
       >
         <StatusBar barStyle="light-content" />
         <KeyboardAvoidingView
-          style={styles.overlay}
+          style={[
+            styles.overlay,
+            {
+              paddingBottom: UI.auth.screenPaddingBottom + Math.max(insets.bottom, Platform.OS === 'ios' ? 18 : 0),
+            },
+          ]}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
+          <View
+            style={[
+              styles.topBubbleWrap,
+              {
+                top: insets.top + 6,
+                left: Math.max(16, Math.min(28, Math.round(windowWidth * 0.06))),
+              },
+            ]}
+          >
+            <GuestModeBubble
+              visible={showGuestModeBubble && !isKeyboardVisible}
+              onPress={() => navigation.navigate('GuestMode')}
+            />
+          </View>
           <View style={styles.inner}>
             <Text style={styles.title}>Log In</Text>
 
@@ -115,7 +155,11 @@ export default function LoginScreen({ navigation, onLogin }) {
                   if (passwordError) setPasswordError('');
                 }}
                 onBlur={() => {
-                  if (!password) setPasswordError('Password is required');
+                  if (!password) {
+                    setPasswordError('Password is required');
+                  } else if (password.length < MIN_PASSWORD_LENGTH) {
+                    setPasswordError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
+                  }
                 }}
               />
               {passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
@@ -148,21 +192,25 @@ export default function LoginScreen({ navigation, onLogin }) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#e52b50' },
   bg: { flex: 1 },
-  overlay: { flex: 1, justifyContent: 'flex-end', paddingBottom: 36 },
-  inner: { marginHorizontal: 28 },
+  overlay: { flex: 1, justifyContent: 'flex-end' },
+  topBubbleWrap: {
+    position: 'absolute',
+    zIndex: 3,
+  },
+  inner: { marginHorizontal: UI.auth.horizontalPadding },
   title: {
-    fontSize: 36,
+    fontSize: UI.auth.titleSize,
     fontWeight: '900',
     color: '#fff',
-    marginBottom: 32,
+    marginBottom: UI.auth.titleSpacing,
     letterSpacing: -0.5,
   },
-  fieldWrapper: { marginBottom: 16 },
+  fieldWrapper: { marginBottom: UI.auth.fieldGap },
   input: {
     backgroundColor: '#e52b50',
-    borderRadius: 16,
+    borderRadius: UI.auth.inputRadius,
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    minHeight: UI.auth.inputMinHeight,
     fontSize: 16,
     color: '#fff',
     fontWeight: '500',
@@ -181,9 +229,10 @@ const styles = StyleSheet.create({
   },
   button: {
     backgroundColor: '#e52b50',
-    borderRadius: 16,
-    paddingVertical: 15,
+    borderRadius: UI.auth.inputRadius,
+    minHeight: UI.auth.buttonMinHeight,
     alignItems: 'center',
+    justifyContent: 'center',
     marginTop: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -199,21 +248,23 @@ const styles = StyleSheet.create({
   },
   linkWrapper: {
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: UI.auth.linkGap,
     alignSelf: 'center',
     backgroundColor: '#e52b50',
     borderRadius: 999,
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    minHeight: UI.auth.pillMinHeight,
+    justifyContent: 'center',
   },
   secondaryLinkWrapper: {
     alignItems: 'center',
-    marginTop: 14,
+    marginTop: UI.auth.secondaryLinkGap,
     alignSelf: 'center',
     backgroundColor: '#e52b50',
     borderRadius: 999,
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    minHeight: UI.auth.pillMinHeight,
+    justifyContent: 'center',
   },
   linkText: {
     color: '#fff',

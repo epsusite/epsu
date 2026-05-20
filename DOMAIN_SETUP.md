@@ -6,7 +6,6 @@
   - `https://epsu.site/terms`
   - `https://epsu.site/guidelines`
   - `https://epsu.site/privacy`
-  - `https://epsu.site/whitepaper`
 - Auth landing pages:
   - `https://epsu.site/auth-confirm.html`
   - `https://epsu.site/reset-password.html`

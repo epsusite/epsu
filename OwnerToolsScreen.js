@@ -1,7 +1,11 @@
 import React, { useMemo } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { fetchEpsuMemberships } from './lib/api/epsus';
+import { requireSupabase } from './lib/supabase';
+import { UI } from './lib/uiTheme';
 
 function ToolCard({ title, meta, onPress, destructive = false }) {
   return (
@@ -16,6 +20,14 @@ function ToolCard({ title, meta, onPress, destructive = false }) {
   );
 }
 
+function isVisibleModerationMember(item) {
+  if (!['active', 'muted'].includes(item.status)) {
+    return false;
+  }
+
+  return Boolean(item.isAdmin || ['host', 'moderator', 'admin'].includes(item.role));
+}
+
 export default function OwnerToolsScreen({
   navigation,
   route,
@@ -27,24 +39,102 @@ export default function OwnerToolsScreen({
   const insets = useSafeAreaInsets();
   const epsuId = route?.params?.epsuId ?? null;
   const epsu = epsus.find((item) => item.id === epsuId) ?? null;
+  const [liveMemberships, setLiveMemberships] = React.useState(null);
+  const supabase = React.useMemo(() => requireSupabase(), []);
+  const sourceMemberships = liveMemberships ?? memberships;
+
+  const loadModerationTeam = React.useCallback(async () => {
+    if (!epsuId) {
+      setLiveMemberships(null);
+      return;
+    }
+
+    try {
+      const result = await fetchEpsuMemberships(epsuId, { includePlatformAdmins: true });
+      setLiveMemberships(result);
+    } catch {
+      setLiveMemberships(null);
+    }
+  }, [epsuId]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      void loadModerationTeam();
+      return undefined;
+    }, [loadModerationTeam])
+  );
+
+  React.useEffect(() => {
+    if (!epsuId) {
+      return undefined;
+    }
+
+    let refreshTimeoutId = null;
+    const scheduleRefresh = () => {
+      if (refreshTimeoutId) {
+        clearTimeout(refreshTimeoutId);
+      }
+
+      refreshTimeoutId = setTimeout(() => {
+        refreshTimeoutId = null;
+        void loadModerationTeam();
+      }, 250);
+    };
+
+    const membershipChannel = supabase
+      .channel(`owner-tools-team:${epsuId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'epsu_memberships',
+          filter: `epsu_id=eq.${epsuId}`,
+        },
+        () => {
+          scheduleRefresh();
+        }
+      )
+      .subscribe();
+
+    const adminChannel = supabase
+      .channel(`owner-tools-admins:${epsuId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'profiles',
+        },
+        () => {
+          scheduleRefresh();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      if (refreshTimeoutId) {
+        clearTimeout(refreshTimeoutId);
+      }
+      void supabase.removeChannel(membershipChannel);
+      void supabase.removeChannel(adminChannel);
+    };
+  }, [epsuId, loadModerationTeam, supabase]);
+
   const filteredMemberships = useMemo(
-    () => memberships.filter((item) => item.epsuId === epsuId),
-    [epsuId, memberships]
+    () => sourceMemberships.filter((item) => item.epsuId === epsuId),
+    [epsuId, sourceMemberships]
   );
   const moderatorCount = useMemo(() => {
     const moderatorProfileIds = new Set(
       filteredMemberships
-        .filter((item) => item.status === 'active' && ['host', 'moderator'].includes(item.role))
+        .filter(isVisibleModerationMember)
         .map((item) => item.profileId)
         .filter(Boolean)
     );
 
-    if (currentIsAdmin && currentUserId) {
-      moderatorProfileIds.add(currentUserId);
-    }
-
     return moderatorProfileIds.size;
-  }, [currentIsAdmin, currentUserId, filteredMemberships]);
+  }, [filteredMemberships]);
 
   return (
     <View style={styles.screen}>
@@ -78,35 +168,37 @@ export default function OwnerToolsScreen({
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#fff8fb',
+    backgroundColor: UI.colors.background,
   },
   content: {
     flex: 1,
-    paddingHorizontal: 18,
+    paddingHorizontal: UI.spacing.screen,
   },
   sectionEyebrow: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#8d6676',
+    color: UI.colors.textSoft,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
     marginBottom: 8,
   },
   sectionTitle: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '900',
-    color: '#20131a',
+    color: UI.colors.text,
     marginBottom: 18,
   },
   toolList: {
-    gap: 12,
+    gap: UI.spacing.gap,
   },
   toolCard: {
-    backgroundColor: '#fff',
-    borderRadius: 18,
+    minHeight: 104,
+    backgroundColor: UI.colors.surface,
+    borderRadius: UI.radius.card,
     borderWidth: 1,
-    borderColor: '#f3d0dd',
-    padding: 16,
+    borderColor: UI.colors.border,
+    padding: UI.spacing.card,
+    justifyContent: 'center',
   },
   toolCardDestructive: {
     borderColor: '#f0b5c0',
@@ -115,15 +207,16 @@ const styles = StyleSheet.create({
   toolTitle: {
     fontSize: 18,
     fontWeight: '900',
-    color: '#20131a',
+    color: UI.colors.text,
     marginBottom: 4,
   },
   toolTitleDestructive: {
-    color: '#c51f40',
+    color: UI.colors.danger,
   },
   toolMeta: {
     fontSize: 14,
-    color: '#7f6170',
+    color: UI.colors.textMuted,
+    lineHeight: 21,
   },
   toolMetaDestructive: {
     color: '#9e4d5f',

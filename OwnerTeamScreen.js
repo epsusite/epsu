@@ -1,16 +1,16 @@
 import React, { useMemo } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { showAppDialog } from './components/AppDialog';
+import { fetchEpsuMemberships } from './lib/api/epsus';
+import { requireSupabase } from './lib/supabase';
+import { UI } from './lib/uiTheme';
 
-function getDisplayedRole({ item, currentUserId, currentIsAdmin, currentUserIsHostAnywhere }) {
-  if (item.profileId === currentUserId && currentIsAdmin) {
+function getDisplayedRole({ item, currentUserId, currentIsAdmin }) {
+  if (item.isAdmin || (item.profileId === currentUserId && currentIsAdmin)) {
     return 'Administrator';
-  }
-
-  if (item.profileId === currentUserId && currentUserIsHostAnywhere) {
-    return 'Host';
   }
 
   if (item.role === 'host') {
@@ -18,6 +18,16 @@ function getDisplayedRole({ item, currentUserId, currentIsAdmin, currentUserIsHo
   }
 
   return 'Moderator';
+}
+
+function getDisplayedMeta({ item, currentUserId, currentIsAdmin }) {
+  const roleLabel = getDisplayedRole({ item, currentUserId, currentIsAdmin });
+
+  if (item.status === 'muted') {
+    return `${roleLabel} (Muted)`;
+  }
+
+  return roleLabel;
 }
 
 function getRoleRank(label) {
@@ -56,9 +66,14 @@ function getDemoteCopy(item) {
   };
 }
 
-function MemberRow({ item, canManage, currentUserId, currentIsAdmin, currentUserIsHostAnywhere, onDemote }) {
-  const roleLabel = getDisplayedRole({ item, currentUserId, currentIsAdmin, currentUserIsHostAnywhere });
-  const canDemote = canManage && item.profileId !== currentUserId && (currentIsAdmin || item.role === 'moderator');
+function MemberRow({ item, canManage, currentUserId, currentIsAdmin, onDemote }) {
+  const roleLabel = getDisplayedRole({ item, currentUserId, currentIsAdmin });
+  const roleMeta = getDisplayedMeta({ item, currentUserId, currentIsAdmin });
+  const canDemote =
+    canManage &&
+    !item.isAdmin &&
+    item.profileId !== currentUserId &&
+    (currentIsAdmin || item.role === 'moderator');
   const identityLabel = item.email ?? roleLabel;
 
   return (
@@ -72,7 +87,7 @@ function MemberRow({ item, canManage, currentUserId, currentIsAdmin, currentUser
 
         <View style={styles.memberCopy}>
           <Text style={styles.memberTitle}>{identityLabel}</Text>
-          <Text style={styles.memberMeta}>{roleLabel}</Text>
+          <Text style={styles.memberMeta}>{roleMeta}</Text>
         </View>
       </View>
 
@@ -99,50 +114,108 @@ export default function OwnerTeamScreen({
   const insets = useSafeAreaInsets();
   const epsuId = route?.params?.epsuId ?? null;
   const epsu = epsus.find((item) => item.id === epsuId) ?? null;
+  const [liveMemberships, setLiveMemberships] = React.useState(null);
+  const supabase = React.useMemo(() => requireSupabase(), []);
+
+  const sourceMemberships = liveMemberships ?? memberships;
+
+  const loadTeam = React.useCallback(async () => {
+    if (!epsuId) {
+      setLiveMemberships(null);
+      return;
+    }
+
+    try {
+      const result = await fetchEpsuMemberships(epsuId, { includePlatformAdmins: true });
+      setLiveMemberships(result);
+    } catch {
+      setLiveMemberships(null);
+    }
+  }, [epsuId]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      void loadTeam();
+      return undefined;
+    }, [loadTeam])
+  );
+
+  React.useEffect(() => {
+    if (!epsuId) {
+      return undefined;
+    }
+
+    let refreshTimeoutId = null;
+    const scheduleRefresh = () => {
+      if (refreshTimeoutId) {
+        clearTimeout(refreshTimeoutId);
+      }
+
+      refreshTimeoutId = setTimeout(() => {
+        refreshTimeoutId = null;
+        void loadTeam();
+      }, 250);
+    };
+
+    const channel = supabase
+      .channel(`owner-team:${epsuId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'epsu_memberships',
+          filter: `epsu_id=eq.${epsuId}`,
+        },
+        () => {
+          scheduleRefresh();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      if (refreshTimeoutId) {
+        clearTimeout(refreshTimeoutId);
+      }
+      void supabase.removeChannel(channel);
+    };
+  }, [epsuId, loadTeam, supabase]);
+  void currentEmail;
 
   const currentMembership = useMemo(
     () =>
-      memberships.find(
-        (item) => item.epsuId === epsuId && item.profileId === currentUserId && item.status === 'active'
+      sourceMemberships.find(
+        (item) =>
+          item.epsuId === epsuId &&
+          item.profileId === currentUserId &&
+          ['active', 'muted'].includes(item.status)
       ) ?? null,
-    [currentUserId, epsuId, memberships]
+    [currentUserId, epsuId, sourceMemberships]
   );
   const canManageTeam = currentIsAdmin || currentMembership?.role === 'host';
-  const currentUserIsHostAnywhere = hostedEpsuIds.length > 0;
+  void hostedEpsuIds;
 
   const filteredMemberships = useMemo(
     () => {
-      const visibleTeam = memberships
+      const visibleTeam = sourceMemberships
         .filter(
-          (item) => item.epsuId === epsuId && item.status === 'active' && ['host', 'moderator'].includes(item.role)
+          (item) =>
+            item.epsuId === epsuId &&
+            ['active', 'muted'].includes(item.status) &&
+            (item.isAdmin || ['host', 'moderator', 'admin'].includes(item.role))
         )
         .slice();
-
-      const alreadyVisible = visibleTeam.some((item) => item.profileId === currentUserId);
-
-      if (currentIsAdmin && currentUserId && !alreadyVisible) {
-        visibleTeam.unshift({
-          id: `admin-${epsuId}-${currentUserId}`,
-          epsuId,
-          profileId: currentUserId,
-          email: currentEmail ?? 'j.truumaa@gmail.com',
-          role: 'moderator',
-          status: 'active',
-        });
-      }
 
       return visibleTeam.sort((left, right) => {
           const leftRole = getDisplayedRole({
             item: left,
             currentUserId,
             currentIsAdmin,
-            currentUserIsHostAnywhere,
           });
           const rightRole = getDisplayedRole({
             item: right,
             currentUserId,
             currentIsAdmin,
-            currentUserIsHostAnywhere,
           });
           const roleGap = getRoleRank(rightRole) - getRoleRank(leftRole);
 
@@ -153,14 +226,34 @@ export default function OwnerTeamScreen({
           return (left.email ?? '').localeCompare(right.email ?? '');
         });
     },
-    [currentEmail, currentIsAdmin, currentUserId, currentUserIsHostAnywhere, epsuId, memberships]
+    [currentIsAdmin, currentUserId, epsuId, sourceMemberships]
   );
 
   const handleDemote = async (member) => {
     const copy = getDemoteCopy(member);
-    const nextRole = getDemoteTargetRole(member);
-    const result = await onDemoteModerator(member.id, nextRole);
-    showAppDialog('Moderation team', result?.ok ? copy.success : copy.failure);
+    showAppDialog(
+      'Moderation team',
+      copy.confirm,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Demote',
+          style: 'destructive',
+          onPress: async () => {
+            const nextRole = getDemoteTargetRole(member);
+            const result = await onDemoteModerator(member.id, nextRole);
+            if (result?.ok) {
+              setLiveMemberships((current) =>
+                Array.isArray(current)
+                  ? current.map((entry) => (entry.id === member.id ? { ...entry, role: nextRole } : entry))
+                  : current
+              );
+            }
+            showAppDialog('Moderation team', result?.ok ? copy.success : copy.failure);
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -179,7 +272,6 @@ export default function OwnerTeamScreen({
               canManage={canManageTeam}
               currentUserId={currentUserId}
               currentIsAdmin={currentIsAdmin}
-              currentUserIsHostAnywhere={currentUserIsHostAnywhere}
               onDemote={handleDemote}
             />
           )}
@@ -208,28 +300,28 @@ export default function OwnerTeamScreen({
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#fff8fb',
+    backgroundColor: UI.colors.background,
   },
   content: {
     flex: 1,
-    paddingHorizontal: 18,
+    paddingHorizontal: UI.spacing.screen,
   },
   sectionEyebrow: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#8d6676',
+    color: UI.colors.textSoft,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
-    marginBottom: 8,
+    marginBottom: UI.header.eyebrowGap,
   },
   sectionTitle: {
-    fontSize: 24,
+    fontSize: UI.header.titleSize,
     fontWeight: '900',
-    color: '#20131a',
-    marginBottom: 18,
+    color: UI.colors.text,
+    marginBottom: UI.header.sectionGap,
   },
   list: {
-    gap: 10,
+    gap: UI.spacing.gap,
     paddingBottom: 86,
   },
   emptyContent: {
@@ -238,32 +330,33 @@ const styles = StyleSheet.create({
     paddingBottom: 86,
   },
   emptyCard: {
-    backgroundColor: '#fff',
-    borderRadius: 18,
+    backgroundColor: UI.colors.surface,
+    borderRadius: UI.radius.card,
     borderWidth: 1,
-    borderColor: '#f3d0dd',
-    padding: 16,
+    borderColor: UI.colors.border,
+    padding: UI.spacing.card,
   },
   emptyTitle: {
     fontSize: 18,
     fontWeight: '900',
-    color: '#20131a',
+    color: UI.colors.text,
     marginBottom: 4,
   },
   emptyText: {
     fontSize: 14,
-    color: '#7f6170',
+    color: UI.colors.textMuted,
     lineHeight: 21,
   },
   memberCard: {
+    minHeight: UI.browseCard.minHeight,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#fff',
-    borderRadius: 18,
-    padding: 16,
+    backgroundColor: UI.colors.surface,
+    borderRadius: UI.radius.card,
+    padding: UI.spacing.card,
     borderWidth: 1,
-    borderColor: '#f3d0dd',
+    borderColor: UI.colors.border,
     gap: 12,
   },
   memberIdentity: {
@@ -272,51 +365,56 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   memberBadge: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: '#fff1f5',
+    width: UI.browseCard.badgeSize,
+    height: UI.browseCard.badgeSize,
+    borderRadius: UI.browseCard.badgeRadius,
+    backgroundColor: UI.colors.surfaceMuted,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: UI.browseCard.badgeGap,
   },
   memberBadgeText: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '900',
-    color: '#e52b50',
+    color: UI.colors.primary,
   },
   memberCopy: {
     flex: 1,
   },
   memberTitle: {
-    fontSize: 18,
+    fontSize: UI.browseCard.titleSize,
     fontWeight: '900',
-    color: '#211319',
-    marginBottom: 2,
+    color: UI.colors.text,
+    marginBottom: 4,
   },
   memberMeta: {
-    fontSize: 14,
-    color: '#7f6170',
+    fontSize: UI.browseCard.metaSize,
+    color: UI.colors.textMuted,
+    lineHeight: 20,
   },
   demoteButton: {
-    borderRadius: 12,
-    backgroundColor: '#e52b50',
+    minHeight: 46,
+    borderRadius: UI.radius.button,
+    backgroundColor: UI.colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: UI.colors.border,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    justifyContent: 'center',
   },
   demoteButtonText: {
-    color: '#fff',
+    color: UI.colors.primary,
     fontSize: 13,
     fontWeight: '800',
   },
   fab: {
     position: 'absolute',
-    right: 18,
+    right: UI.spacing.screen,
     bottom: 18,
+    zIndex: 10,
     width: 58,
     height: 58,
     borderRadius: 29,
-    backgroundColor: '#e52b50',
+    backgroundColor: UI.colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 0,
@@ -325,7 +423,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
   },
   fabText: {
-    color: '#fff',
+    color: UI.colors.surface,
     fontSize: 30,
     fontWeight: '900',
     lineHeight: 32,

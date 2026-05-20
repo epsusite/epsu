@@ -32,6 +32,11 @@
       "edgeToEdgeEnabled": false,
       "predictiveBackGestureEnabled": false,
       "package": "com.jtruu.epsu",
+      "blockedPermissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ],
       "intentFilters": [
         {
           "action": "VIEW",
@@ -79,7 +84,9 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Epsu only accesses your photo library if you choose a school logo to upload."
+          "photosPermission": "Epsu only accesses your photo library if you choose a school logo to upload.",
+          "cameraPermission": false,
+          "microphonePermission": false
         }
       ],
       [

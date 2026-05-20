@@ -11,6 +11,7 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 
 import LoginScreen from './LoginScreen';
 import SignUpScreen from './SignUpScreen';
+import GuestModeScreen from './GuestModeScreen';
 import ForgotPasswordScreen from './ForgotPasswordScreen';
 import ResetPasswordScreen from './ResetPasswordScreen';
 import HomeScreen from './HomeScreen';
@@ -27,23 +28,26 @@ import ReportScreen from './ReportScreen';
 import RentEpsuScreen from './RentEpsuScreen';
 import SettingsScreen from './SettingsScreen';
 import AdminScreen from './AdminScreen';
+import AdminFullhourQueueScreen from './AdminFullhourQueueScreen';
 import { AppProvider, useAppActions, useAppData, useAppSession } from './AppContext';
 import { AppDialogHost, showAppDialog } from './components/AppDialog';
 import { requireSupabase } from './lib/supabase';
 import { createAccountActions } from './lib/createAccountActions';
 import { createCommunityActions } from './lib/createCommunityActions';
-import { useAppBootstrap } from './lib/useAppBootstrap';
+import { resetSessionState, useAppBootstrap } from './lib/useAppBootstrap';
 import { useAppNotifications } from './lib/useAppNotifications';
 import { useEpsuPresence } from './lib/useEpsuPresence';
 import { subscribeToNetworkState } from './lib/networkGuard';
-import { fetchModeratedEpsuIds, fetchHostedEpsuIds, redeemInvite } from './lib/api/epsus';
-import { fetchPosts } from './lib/api/feed';
+import { fetchEpsuActivePostCounts, fetchModeratedEpsuIds, fetchHostedEpsuIds, redeemInvite } from './lib/api/epsus';
+import { fetchGuestEpsuFeedPage, fetchGuestPostById, fetchGuestPosts, fetchPosts } from './lib/api/feed';
 import { fetchFlaggedQueuedPostsForEpsu } from './lib/api/moderation';
 import {
+  fetchGuestEpsus,
   fetchEpsusWithCountry,
   fetchHiddenEpsuIds,
   fetchVisibleMemberships,
 } from './lib/schoolApi';
+import { addReviewedPostIdByEpsu } from './lib/appStateTransforms';
 
 let NotificationsModule = null;
 try {
@@ -67,7 +71,10 @@ const SettingsStack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 const PENDING_MOD_INVITE_STORAGE_KEY = 'epsu_pending_mod_invite_token';
 const INTRO_COMPLETED_STORAGE_KEY = 'has_completed_intro_v1';
-const FEED_REFRESH_FALLBACK_MS = 60000;
+const GUEST_MODE_REMAINING_SECONDS_STORAGE_KEY = 'epsu_guest_mode_remaining_seconds_v1';
+const LAST_GUEST_COUNTRY_CODE_STORAGE_KEY = 'epsu_last_guest_country_code_v1';
+const FEED_REFRESH_FALLBACK_MS = 300000;
+const GUEST_MODE_DURATION_SECONDS = 60;
 
 function IntroBurgerScreen({ navigation }) {
   return (
@@ -77,8 +84,8 @@ function IntroBurgerScreen({ navigation }) {
       imageSource={require('./assets/images/1774535505571.jpg')}
       sections={[
         { label: 'What is this?', answer: 'Epsus are anonymous local communities for schools and regions' },
-        { label: 'Who is this for?', answer: 'People who want honest local conversations' },
-        { label: 'Why use this?', answer: 'To talk without fear of discrimination or hate' },
+        { label: 'Who is this for?', answer: 'People who want secure & honest local posting' },
+        { label: 'Who made this?', answer: 'Built by a student who values your privacy' },
       ]}
       primaryLabel="Continue"
       onPrimaryPress={() => navigation.navigate('IntroPizza')}
@@ -265,12 +272,39 @@ function getDeepLinkParams(url) {
 }
 
 function getModeratorInviteToken(url) {
-  const match = url?.match(/mod-invite\/([^?#/]+)/i);
-  if (!match?.[1]) {
+  if (!url) {
     return null;
   }
 
-  return decodeURIComponent(match[1]);
+  const params = getDeepLinkParams(url);
+  const queryToken = params.get('token');
+  if (queryToken) {
+    return queryToken;
+  }
+
+  const modInviteMatch = url.match(/mod-invite\/([^?#/]+)/i);
+  if (modInviteMatch?.[1]) {
+    return decodeURIComponent(modInviteMatch[1]);
+  }
+
+  const modPathMatch = url.match(/\/mod(?:\/|\.html(?:\?|#|$)|\?)([^?#/]*)/i);
+  if (modPathMatch?.[1]) {
+    return decodeURIComponent(modPathMatch[1]);
+  }
+
+  return null;
+}
+
+function logModeratorInvite(message, details = null) {
+  if (details == null) {
+    console.log(`[mod-invite] ${message}`);
+    return;
+  }
+
+  const normalizedDetails = typeof details === 'string'
+    ? details
+    : JSON.stringify(details);
+  console.log(`[mod-invite] ${message} ${normalizedDetails}`);
 }
 
 async function storePendingModeratorInviteToken(token) {
@@ -279,10 +313,26 @@ async function storePendingModeratorInviteToken(token) {
   }
 
   await AsyncStorage.setItem(PENDING_MOD_INVITE_STORAGE_KEY, token);
+  logModeratorInvite('stored pending token', { tokenPrefix: token.slice(0, 8) });
 }
 
-async function clearPendingModeratorInviteToken() {
+async function clearPendingModeratorInviteToken(expectedToken = null) {
+  if (expectedToken) {
+    const storedToken = await AsyncStorage.getItem(PENDING_MOD_INVITE_STORAGE_KEY).catch(() => null);
+    if (storedToken && storedToken !== expectedToken) {
+      logModeratorInvite('skipped clearing pending token because a newer token is stored', {
+        expectedTokenPrefix: expectedToken.slice(0, 8),
+        storedTokenPrefix: storedToken.slice(0, 8),
+      });
+      return false;
+    }
+  }
+
   await AsyncStorage.removeItem(PENDING_MOD_INVITE_STORAGE_KEY);
+  logModeratorInvite('cleared pending token', {
+    expectedTokenPrefix: expectedToken ? expectedToken.slice(0, 8) : null,
+  });
+  return true;
 }
 
 function PostTabIcon({ focused }) {
@@ -292,6 +342,43 @@ function PostTabIcon({ focused }) {
       size={24}
       color="#fff"
     />
+  );
+}
+
+function formatGuestCountdown(totalSeconds) {
+  const safeSeconds = Math.max(0, totalSeconds);
+  const minutes = String(Math.floor(safeSeconds / 60)).padStart(1, '0');
+  const seconds = String(safeSeconds % 60).padStart(2, '0');
+  return `${minutes}:${seconds}`;
+}
+
+function GuestTimerBadge({ secondsLeft }) {
+  return (
+    <View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        top: 14,
+        right: 18,
+        zIndex: 10,
+        minWidth: 92,
+        borderRadius: 999,
+        backgroundColor: '#e52b50',
+        paddingHorizontal: 18,
+        paddingVertical: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.18,
+        shadowRadius: 12,
+        elevation: 8,
+      }}
+    >
+      <Text style={{ color: '#fff', fontSize: 22, fontWeight: '900', letterSpacing: 0.6 }}>
+        {formatGuestCountdown(secondsLeft)}
+      </Text>
+    </View>
   );
 }
 
@@ -307,8 +394,10 @@ function HomeBaseScreen(props) {
       posts={data.posts}
       memberships={data.memberships}
       epsuPopulationById={data.epsuPopulationById}
+      activePostCountByEpsu={data.activePostCountByEpsu}
       reviewedPostIdsByEpsu={data.reviewedPostIdsByEpsu}
       reportedPostIds={data.reportedPostIds}
+      repliedToPostIds={data.repliedToPostIds}
       onReactToPost={actions.onReactToPost}
       onReportPost={actions.onReportPost}
       onBlockPostAuthor={actions.onBlockPostAuthor}
@@ -317,10 +406,14 @@ function HomeBaseScreen(props) {
       userMemberships={data.userMemberships}
       hiddenEpsuIds={data.hiddenEpsuIds}
       blockedAuthorIds={data.blockedAuthorIds}
-      onLeaveSchoolEpsu={actions.onLeaveSchoolEpsu}
-      onJoinRegionalEpsu={actions.onJoinRegionalEpsu}
+      onLeaveEpsu={actions.onLeaveEpsu}
+      onJoinEpsu={actions.onJoinEpsu}
+      onFetchEpsuFeedPage={actions.onFetchEpsuFeedPage}
+      onFetchPostById={actions.onFetchPostById}
       currentCountryCode={session.currentCountryCode}
       currentIsAdmin={session.currentIsAdmin}
+      isGuestMode={session.isGuestMode}
+      onGuestLockedAction={actions.onGuestLockedAction}
     />
   );
 }
@@ -389,18 +482,36 @@ function OwnerTeamAppScreen(props) {
 function OwnerWorstUsersAppScreen(props) {
   const data = useAppData();
   const actions = useAppActions();
-  return <OwnerWorstUsersScreen {...props} epsus={data.epsus} onKickSchoolMember={actions.onKickSchoolMember} />;
+  return <OwnerWorstUsersScreen {...props} epsus={data.epsus} onKickEpsuMember={actions.onKickEpsuMember} />;
 }
 
 function OwnerModInviteAppScreen(props) {
   const data = useAppData();
   const actions = useAppActions();
-  return <OwnerModInviteScreen {...props} epsus={data.epsus} onEnsureInvite={actions.onEnsureInvite} />;
+  return (
+    <OwnerModInviteScreen
+      {...props}
+      epsus={data.epsus}
+      onEnsureInvite={actions.onEnsureInvite}
+      onFetchInviteStatus={actions.onFetchInviteStatus}
+    />
+  );
 }
 
 function JoinInviteAppScreen(props) {
+  const session = useAppSession();
+  const data = useAppData();
   const actions = useAppActions();
-  return <JoinInviteScreen {...props} onSubmitEpsuSuggestion={actions.onSubmitEpsuSuggestion} />;
+  return (
+    <JoinInviteScreen
+      {...props}
+      currentCountryCode={session.currentCountryCode}
+      currentIsAdmin={session.currentIsAdmin}
+      epsus={data.epsus}
+      userMemberships={data.userMemberships}
+      onSubmitEpsuSuggestion={actions.onSubmitEpsuSuggestion}
+    />
+  );
 }
 
 function DeleteEpsuAppScreen(props) {
@@ -415,13 +526,27 @@ function ReportReasonAppScreen(props) {
 }
 
 function RentEpsuAppScreen(props) {
+  const session = useAppSession();
+  const data = useAppData();
   const actions = useAppActions();
-  return <RentEpsuScreen {...props} onCreateSchoolEpsu={actions.onCreateSchoolEpsu} />;
+  return (
+    <RentEpsuScreen
+      {...props}
+      currentIsAdmin={session.currentIsAdmin}
+      epsus={data.epsus}
+      userMemberships={data.userMemberships}
+      onCreateSchoolEpsu={actions.onCreateSchoolEpsu}
+    />
+  );
 }
 
 function SettingsMainAppScreen(props) {
   const session = useAppSession();
   const actions = useAppActions();
+
+  if (session.isGuestMode) {
+    return null;
+  }
 
   return (
     <SettingsScreen
@@ -485,6 +610,28 @@ function AdminAppScreen(props) {
   );
 }
 
+function AdminFullhourQueueAppScreen(props) {
+  const data = useAppData();
+  const actions = useAppActions();
+  const session = useAppSession();
+
+  return (
+    <AdminFullhourQueueScreen
+      {...props}
+      mode={props.route?.name === 'AdminFullhourInvestigation' ? 'admin-investigation' : 'admin-queue'}
+      currentUserId={session.currentUserId}
+      epsus={data.epsus}
+      posts={data.posts}
+      reports={data.reports}
+      queuedFlaggedPosts={data.queuedFlaggedPosts}
+      onDismissReport={actions.onDismissReport}
+      onDismissQueuedPost={actions.onDismissQueuedPost}
+      onRemoveReportedPost={actions.onRemoveReportedPost}
+      onMuteReportedAuthor={actions.onMuteReportedAuthor}
+    />
+  );
+}
+
 function PostAppScreen(props) {
   const actions = useAppActions();
   const session = useAppSession();
@@ -497,18 +644,49 @@ function PostAppScreen(props) {
       hasAcceptedCommunityGuidelines={session.currentHasAcceptedCommunityGuidelines}
       epsus={data.epsus}
       userMemberships={data.userMemberships}
+      currentUserId={session.currentUserId}
+      isGuestMode={session.isGuestMode}
+      onGuestLockedAction={actions.onGuestLockedAction}
+      currentCountryCode={session.currentCountryCode}
     />
   );
 }
 
 function LoginAppScreen(props) {
   const actions = useAppActions();
-  return <LoginScreen {...props} onLogin={actions.onLogin} />;
+  const session = useAppSession();
+  return (
+    <LoginScreen
+      {...props}
+      onLogin={actions.onLogin}
+      showGuestModeBubble={session.hasLoadedGuestTime && session.guestSecondsLeft > 0}
+    />
+  );
 }
 
 function SignUpAppScreen(props) {
   const actions = useAppActions();
-  return <SignUpScreen {...props} onSignUp={actions.onSignUp} />;
+  const session = useAppSession();
+  return (
+    <SignUpScreen
+      {...props}
+      onSignUp={actions.onSignUp}
+      showGuestModeBubble={session.hasLoadedGuestTime && session.guestSecondsLeft > 0}
+    />
+  );
+}
+
+function GuestModeAppScreen(props) {
+  const actions = useAppActions();
+  const session = useAppSession();
+
+  return (
+    <GuestModeScreen
+      {...props}
+      onStartGuestMode={actions.onStartGuestMode}
+      initialCountryCode={session.guestCountryCode}
+    />
+  );
 }
 
 function ForgotPasswordAppScreen(props) {
@@ -547,15 +725,20 @@ function SettingsStackScreen() {
       <SettingsStack.Screen name="AccountHistory" component={AccountHistoryAppScreen} />
       <SettingsStack.Screen name="Help" component={HelpAppScreen} />
       {session.currentIsAdmin ? <SettingsStack.Screen name="Admin" component={AdminAppScreen} /> : null}
+      {session.currentIsAdmin ? <SettingsStack.Screen name="AdminFullhourQueue" component={AdminFullhourQueueAppScreen} /> : null}
+      {session.currentIsAdmin ? <SettingsStack.Screen name="AdminFullhourInvestigation" component={AdminFullhourQueueAppScreen} /> : null}
     </SettingsStack.Navigator>
   );
 }
 
 function MainTabs() {
   const insets = useSafeAreaInsets();
+  const session = useAppSession();
+  const actions = useAppActions();
 
   return (
     <View style={{ flex: 1 }}>
+      {session.isGuestMode ? <GuestTimerBadge secondsLeft={session.guestSecondsLeft} /> : null}
       <Tab.Navigator
         initialRouteName="Home"
         screenOptions={{
@@ -616,6 +799,12 @@ function MainTabs() {
           }}
           listeners={({ navigation, route }) => ({
             tabPress: (event) => {
+              if (session.isGuestMode) {
+                event.preventDefault();
+                actions.onGuestLockedAction();
+                return;
+              }
+
               const state = navigation.getState();
               const activeRoute = state.routes[state.index];
               const isFocused = activeRoute.key === route.key;
@@ -710,6 +899,12 @@ export default function App() {
   const [fontsLoaded] = useFonts(Ionicons.font);
   const [hasCompletedIntro, setHasCompletedIntro] = useState(null);
   const [authEntryScreen, setAuthEntryScreen] = useState('Login');
+  const [isGuestMode, setIsGuestMode] = useState(false);
+  const [guestCountryCode, setGuestCountryCode] = useState(null);
+  const [guestSecondsLeft, setGuestSecondsLeft] = useState(GUEST_MODE_DURATION_SECONDS);
+  const [hasLoadedGuestTime, setHasLoadedGuestTime] = useState(false);
+  const [isGuestBootstrapping, setIsGuestBootstrapping] = useState(false);
+  const [isGuestPromptOpen, setIsGuestPromptOpen] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUserId, setCurrentUserId] = useState(null);
   const [currentUsername, setCurrentUsername] = useState(null);
@@ -727,6 +922,7 @@ export default function App() {
   const [posts, setPosts] = useState([]);
   const [reviewedPostIdsByEpsu, setReviewedPostIdsByEpsu] = useState({});
   const [reportedPostIds, setReportedPostIds] = useState([]);
+  const [repliedToPostIds, setRepliedToPostIds] = useState([]);
   const [moderatedEpsuIds, setModeratedEpsuIds] = useState([]);
   const [hostedEpsuIds, setHostedEpsuIds] = useState([]);
   const [memberships, setMemberships] = useState([]);
@@ -736,6 +932,7 @@ export default function App() {
   const [queuedFlaggedPosts, setQueuedFlaggedPosts] = useState([]);
   const [blockedAuthorIds, setBlockedAuthorIds] = useState([]);
   const [epsuPopulationById, setEpsuPopulationById] = useState({});
+  const [activePostCountByEpsu, setActivePostCountByEpsu] = useState({});
   const [unreadAppNotifications, setUnreadAppNotifications] = useState([]);
   const [isShowingAppNotification, setIsShowingAppNotification] = useState(false);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
@@ -747,6 +944,106 @@ export default function App() {
   const [isBootstrapping, setIsBootstrapping] = useState(false);
   const [bootMessage, setBootMessage] = useState('Preparing your app');
   const [hasHydratedAppData, setHasHydratedAppData] = useState(false);
+  const isAuthenticatedRef = React.useRef(isAuthenticated);
+  const pendingModeratorInviteTokenRef = React.useRef(pendingModeratorInviteToken);
+
+  useEffect(() => {
+    pendingModeratorInviteTokenRef.current = pendingModeratorInviteToken;
+  }, [pendingModeratorInviteToken]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    Promise.all([
+      AsyncStorage.getItem(GUEST_MODE_REMAINING_SECONDS_STORAGE_KEY),
+      AsyncStorage.getItem(LAST_GUEST_COUNTRY_CODE_STORAGE_KEY),
+    ])
+      .then(([storedValue, storedCountryCode]) => {
+        if (!isActive) {
+          return;
+        }
+
+        const parsedValue = Number.parseInt(storedValue ?? '', 10);
+        if (Number.isFinite(parsedValue) && parsedValue >= 0) {
+          setGuestSecondsLeft(Math.min(GUEST_MODE_DURATION_SECONDS, parsedValue));
+        } else {
+          setGuestSecondsLeft(GUEST_MODE_DURATION_SECONDS);
+        }
+        setGuestCountryCode(storedCountryCode || null);
+        setHasLoadedGuestTime(true);
+      })
+      .catch(() => {
+        if (isActive) {
+          setGuestSecondsLeft(GUEST_MODE_DURATION_SECONDS);
+          setGuestCountryCode(null);
+          setHasLoadedGuestTime(true);
+        }
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  const resetGuestSession = React.useCallback(() => {
+    setIsGuestMode(false);
+    setIsGuestBootstrapping(false);
+    setIsGuestPromptOpen(false);
+    setCurrentCountryCode(null);
+    setCurrentHasAcceptedCommunityGuidelines(false);
+    setEpsus([]);
+    setPosts([]);
+    setReviewedPostIdsByEpsu({});
+    setReportedPostIds([]);
+    setModeratedEpsuIds([]);
+    setHostedEpsuIds([]);
+    setMemberships([]);
+    setUserMemberships([]);
+    setHiddenEpsuIds([]);
+    setReports([]);
+    setQueuedFlaggedPosts([]);
+    setBlockedAuthorIds([]);
+    setEpsuPopulationById({});
+    setActivePostCountByEpsu({});
+  }, []);
+
+  const promptGuestSignup = React.useCallback(() => {
+    if (isGuestPromptOpen) {
+      return;
+    }
+
+    setIsGuestPromptOpen(true);
+    showAppDialog(
+      "You're a guest!",
+      "You can't do that yet. Make an account now",
+      [
+        {
+          text: 'Create account',
+          onPress: () => {
+            resetGuestSession();
+            setAuthEntryScreen('SignUp');
+          },
+        },
+      ],
+      {
+        dismissible: false,
+        onClose: () => {
+          setIsGuestPromptOpen(false);
+        },
+      }
+    );
+  }, [isGuestPromptOpen, resetGuestSession]);
+
+  const handleStartGuestMode = React.useCallback((countryCode) => {
+    if (guestSecondsLeft <= 0) {
+      return;
+    }
+
+    setGuestCountryCode(countryCode);
+    void AsyncStorage.setItem(LAST_GUEST_COUNTRY_CODE_STORAGE_KEY, countryCode).catch(() => {});
+    setIsGuestPromptOpen(false);
+    setIsGuestMode(true);
+  }, [guestSecondsLeft]);
 
   const addNotificationDiagnostic = React.useCallback((event, details = null) => {
     const normalizedDetails = details == null
@@ -773,6 +1070,111 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!isGuestMode || !guestCountryCode || !isOnline) {
+      return undefined;
+    }
+
+    let isActive = true;
+
+    const loadGuestSession = async () => {
+      setIsGuestBootstrapping(true);
+
+      try {
+        const nextGuestEpsus = await fetchGuestEpsus(guestCountryCode);
+        const nextPopulation = nextGuestEpsus.reduce((accumulator, epsu) => {
+          accumulator[epsu.id] = {
+            memberCount: epsu.member_count ?? 0,
+            onlineCount: epsu.online_count ?? 0,
+          };
+          return accumulator;
+        }, {});
+        const normalizedGuestEpsus = nextGuestEpsus.map((epsu) => ({
+          id: epsu.id,
+          slug: epsu.slug,
+          name: epsu.name,
+          code: epsu.code,
+          scope: epsu.scope,
+          website: epsu.website,
+          review_status: epsu.review_status,
+          country_code: epsu.country_code,
+          logo_path: epsu.logo_path,
+        }));
+        const guestMemberships = normalizedGuestEpsus.map((epsu) => ({
+          id: `guest:${epsu.id}`,
+          epsuId: epsu.id,
+          profileId: 'guest',
+          role: 'member',
+          status: 'active',
+          mutedUntil: null,
+        }));
+        const nextPosts = await fetchGuestPosts(normalizedGuestEpsus.map((epsu) => epsu.id));
+
+        if (!isActive) {
+          return;
+        }
+
+        setCurrentCountryCode(guestCountryCode);
+        setCurrentHasAcceptedCommunityGuidelines(false);
+        setEpsus(normalizedGuestEpsus);
+        setPosts(nextPosts);
+        setReviewedPostIdsByEpsu({});
+        setReportedPostIds([]);
+        setModeratedEpsuIds([]);
+        setHostedEpsuIds([]);
+        setMemberships([]);
+        setUserMemberships(guestMemberships);
+        setHiddenEpsuIds([]);
+        setReports([]);
+        setQueuedFlaggedPosts([]);
+        setBlockedAuthorIds([]);
+        setEpsuPopulationById(nextPopulation);
+      } finally {
+        if (isActive) {
+          setIsGuestBootstrapping(false);
+        }
+      }
+    };
+
+    void loadGuestSession();
+
+    return () => {
+      isActive = false;
+    };
+  }, [guestCountryCode, isGuestMode, isOnline]);
+
+  useEffect(() => {
+    if (!isGuestMode) {
+      return undefined;
+    }
+
+    if (guestSecondsLeft <= 0) {
+      if (!isGuestPromptOpen) {
+        promptGuestSignup();
+      }
+      return undefined;
+    }
+
+    const timeoutId = setTimeout(() => {
+      setGuestSecondsLeft((current) => Math.max(0, current - 1));
+    }, 1000);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [guestSecondsLeft, isGuestMode, isGuestPromptOpen, promptGuestSignup]);
+
+  useEffect(() => {
+    if (!hasLoadedGuestTime) {
+      return;
+    }
+
+    AsyncStorage.setItem(
+      GUEST_MODE_REMAINING_SECONDS_STORAGE_KEY,
+      String(Math.max(0, guestSecondsLeft))
+    ).catch(() => {});
+  }, [guestSecondsLeft, hasLoadedGuestTime]);
+
+  useEffect(() => {
     let isActive = true;
 
     AsyncStorage.getItem(INTRO_COMPLETED_STORAGE_KEY)
@@ -790,6 +1192,7 @@ export default function App() {
     AsyncStorage.getItem(PENDING_MOD_INVITE_STORAGE_KEY)
       .then((storedToken) => {
         if (isActive && storedToken) {
+          logModeratorInvite('loaded stored pending token on app start', { tokenPrefix: storedToken.slice(0, 8) });
           setPendingModeratorInviteToken(storedToken);
         }
       })
@@ -804,6 +1207,10 @@ export default function App() {
     if (isAuthenticated) {
       setAuthEntryScreen('Login');
     }
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    isAuthenticatedRef.current = isAuthenticated;
   }, [isAuthenticated]);
 
   useEffect(() => {
@@ -825,14 +1232,19 @@ export default function App() {
 
     const handleAuthUrl = async (url) => {
       if (!url) {
+        logModeratorInvite('handleAuthUrl skipped empty url');
         return;
       }
 
+      logModeratorInvite('handleAuthUrl received', { url });
+
       const moderatorInviteToken = getModeratorInviteToken(url);
       if (moderatorInviteToken) {
+        logModeratorInvite('token extracted from url', { tokenPrefix: moderatorInviteToken.slice(0, 8) });
         await storePendingModeratorInviteToken(moderatorInviteToken).catch(() => {});
         setPendingModeratorInviteToken(moderatorInviteToken);
-        if (!isAuthenticated) {
+        if (!isAuthenticatedRef.current) {
+          logModeratorInvite('user not authenticated yet, prompting login');
           showAppDialog('Moderator invite', 'Log in to accept this moderator invite');
         }
         return;
@@ -854,6 +1266,10 @@ export default function App() {
       if (errorDescription) {
         showAppDialog(isResetPasswordUrl ? 'Reset password' : 'Email confirmation', errorDescription);
         return;
+      }
+
+      if (isResetPasswordUrl && isActive) {
+        setIsPasswordRecovery(true);
       }
 
       try {
@@ -888,13 +1304,12 @@ export default function App() {
           setAuthRefreshNonce((current) => current + 1);
         }
 
-        if (isResetPasswordUrl && isActive) {
-          setIsPasswordRecovery(true);
-        }
-
       } catch (error) {
         if (isActive) {
           setIsCompletingAuthLink(false);
+          if (isResetPasswordUrl) {
+            setIsPasswordRecovery(false);
+          }
         }
         showAppDialog(
           isResetPasswordUrl ? 'Reset password' : 'Email confirmation',
@@ -904,10 +1319,12 @@ export default function App() {
     };
 
     Linking.getInitialURL().then((url) => {
+      logModeratorInvite('Linking.getInitialURL resolved', { url: url ?? null });
       void handleAuthUrl(url);
     });
 
     const subscription = Linking.addEventListener('url', ({ url }) => {
+      logModeratorInvite('Linking url event', { url });
       void handleAuthUrl(url);
     });
 
@@ -915,7 +1332,7 @@ export default function App() {
       isActive = false;
       subscription.remove();
     };
-  }, [isAuthenticated, supabase]);
+  }, [supabase]);
 
   useEffect(() => {
     if (isAuthenticated && isCompletingAuthLink) {
@@ -930,25 +1347,49 @@ export default function App() {
       !currentUserId ||
       isRedeemingModeratorInvite
     ) {
+      logModeratorInvite('redeem effect skipped', {
+        hasToken: Boolean(pendingModeratorInviteToken),
+        isAuthenticated,
+        currentUserId,
+        isRedeemingModeratorInvite,
+      });
       return;
     }
 
     let isActive = true;
 
     const handleModeratorInvite = async () => {
+      const tokenToRedeem = pendingModeratorInviteToken;
+      logModeratorInvite('starting invite redemption', {
+        tokenPrefix: tokenToRedeem.slice(0, 8),
+        currentUserId,
+      });
       setIsRedeemingModeratorInvite(true);
 
       try {
-        const result = await redeemInvite({ token: pendingModeratorInviteToken });
+        const result = await redeemInvite({ token: tokenToRedeem });
+        logModeratorInvite('redeemInvite returned', result ?? null);
 
-        if (!isActive) {
+        if (!result?.ok) {
+          logModeratorInvite('redeemInvite reported failure', result ?? null);
+          if (pendingModeratorInviteTokenRef.current === tokenToRedeem) {
+            setPendingModeratorInviteToken(null);
+          }
+          await clearPendingModeratorInviteToken(tokenToRedeem).catch(() => {});
+          if (!isActive) {
+            logModeratorInvite('redeem flow became inactive before showing failure');
+            return;
+          }
+          showAppDialog('Moderator invite', result?.message ?? 'This invite could not be used');
           return;
         }
 
-        if (!result?.ok) {
-          showAppDialog('Moderator invite', result?.message ?? 'This invite could not be used');
-          setPendingModeratorInviteToken(null);
-          await clearPendingModeratorInviteToken().catch(() => {});
+        if (!isActive) {
+          logModeratorInvite('redeem flow became inactive before handling success');
+          if (pendingModeratorInviteTokenRef.current === tokenToRedeem) {
+            setPendingModeratorInviteToken(null);
+          }
+          await clearPendingModeratorInviteToken(tokenToRedeem).catch(() => {});
           return;
         }
 
@@ -960,18 +1401,30 @@ export default function App() {
           nextHiddenEpsuIds,
         ] = await Promise.all([
           fetchEpsusWithCountry(),
-          fetchVisibleMemberships(currentUserId),
+          fetchVisibleMemberships(currentUserId, { ensureAdminMemberships: currentIsAdmin }),
           fetchHostedEpsuIds(currentUserId),
           fetchModeratedEpsuIds(currentUserId),
           fetchHiddenEpsuIds(currentUserId),
         ]);
+        const normalizedMemberships = nextMemberships;
+        logModeratorInvite('post-redeem refresh finished', {
+          epsuCount: nextEpsus.length,
+          membershipCount: normalizedMemberships.length,
+          moderatedEpsuCount: nextModeratedEpsuIds.length,
+          targetEpsuId: result.epsuId ?? null,
+        });
 
         if (!isActive) {
+          logModeratorInvite('redeem flow became inactive after refresh');
+          if (pendingModeratorInviteTokenRef.current === tokenToRedeem) {
+            setPendingModeratorInviteToken(null);
+          }
+          await clearPendingModeratorInviteToken(tokenToRedeem).catch(() => {});
           return;
         }
 
         setEpsus(nextEpsus);
-        setUserMemberships(nextMemberships);
+        setUserMemberships(normalizedMemberships);
         setHostedEpsuIds(nextHostedEpsuIds);
         setModeratedEpsuIds(nextModeratedEpsuIds);
         setHiddenEpsuIds(nextHiddenEpsuIds);
@@ -979,21 +1432,30 @@ export default function App() {
         const epsuName =
           nextEpsus.find((epsu) => epsu.id === result.epsuId)?.name ??
           'this Epsu';
+        logModeratorInvite('moderator access granted in app state', {
+          epsuId: result.epsuId ?? null,
+          epsuName,
+        });
         showAppDialog('Moderator access granted', `You are now a moderator in ${epsuName}`);
-        setPendingModeratorInviteToken(null);
-        await clearPendingModeratorInviteToken().catch(() => {});
+        if (pendingModeratorInviteTokenRef.current === tokenToRedeem) {
+          setPendingModeratorInviteToken(null);
+        }
+        await clearPendingModeratorInviteToken(tokenToRedeem).catch(() => {});
       } catch (error) {
         if (!isActive) {
+          logModeratorInvite('redeem flow error after inactive state', error?.message ?? String(error));
           return;
         }
 
+        logModeratorInvite('redeem flow threw error', error?.message ?? String(error));
         showAppDialog('Moderator invite', error?.message ?? 'This invite could not be used');
-        setPendingModeratorInviteToken(null);
-        await clearPendingModeratorInviteToken().catch(() => {});
-      } finally {
-        if (isActive) {
-          setIsRedeemingModeratorInvite(false);
+        if (pendingModeratorInviteTokenRef.current === tokenToRedeem) {
+          setPendingModeratorInviteToken(null);
         }
+        await clearPendingModeratorInviteToken(tokenToRedeem).catch(() => {});
+      } finally {
+        logModeratorInvite('ending invite redemption', { isActive });
+        setIsRedeemingModeratorInvite(false);
       }
     };
 
@@ -1012,10 +1474,12 @@ export default function App() {
     setModeratedEpsuIds,
     setHostedEpsuIds,
     setUserMemberships,
+    currentIsAdmin,
   ]);
 
   useAppBootstrap({
     supabase,
+    isGuestMode,
     isOnline,
     setIsReady,
     setIsAuthenticated,
@@ -1031,6 +1495,7 @@ export default function App() {
     setPosts,
     setReviewedPostIdsByEpsu,
     setReportedPostIds,
+    setRepliedToPostIds,
     setModeratedEpsuIds,
     setHostedEpsuIds,
     setMemberships,
@@ -1038,6 +1503,7 @@ export default function App() {
     setHiddenEpsuIds,
     setReports,
     setEpsuPopulationById,
+    setActivePostCountByEpsu,
     setUnreadAppNotifications,
     setIsShowingAppNotification,
     setIsBootstrapping,
@@ -1045,6 +1511,7 @@ export default function App() {
     setHasHydratedAppData,
     setQueuedFlaggedPosts,
     setBlockedAuthorIds,
+    currentEmail,
     authRefreshNonce,
   });
 
@@ -1053,10 +1520,10 @@ export default function App() {
     handleLogin,
     handleRequestPasswordReset,
     handleCompletePasswordRecovery,
-    handleLogout,
+    handleLogout: rawHandleLogout,
     handleToggleNotifications,
     handleRequestNotificationPermission,
-    handleChangePassword,
+    handleChangePassword: rawHandleChangePassword,
     handleDeleteAccount,
     handleConfirmDeleteAccount,
     handleFetchAccountHistory,
@@ -1082,9 +1549,108 @@ export default function App() {
     ]
   );
 
+  const applySignedOutUiState = React.useCallback(() => {
+    setIsGuestMode(false);
+    setIsGuestBootstrapping(false);
+    setIsGuestPromptOpen(false);
+    setAuthEntryScreen('Login');
+    resetSessionState({
+      setCurrentUsername,
+      setCurrentIsAdmin,
+      setCurrentUserId,
+      setCurrentEmail,
+      setCurrentCountryCode,
+      setCurrentHasAcceptedCommunityGuidelines,
+      setNotificationsEnabled,
+      setEpsus,
+      setPosts,
+      setReviewedPostIdsByEpsu,
+      setReportedPostIds,
+      setRepliedToPostIds,
+      setModeratedEpsuIds,
+      setHostedEpsuIds,
+      setMemberships,
+      setUserMemberships,
+      setHiddenEpsuIds,
+      setReports,
+      setEpsuPopulationById,
+      setActivePostCountByEpsu,
+      setUnreadAppNotifications,
+      setIsShowingAppNotification,
+      setIsAuthenticated,
+      setIsBootstrapping,
+      setBootMessage,
+      setHasHydratedAppData,
+      setQueuedFlaggedPosts,
+      setBlockedAuthorIds,
+    });
+    setIsReady(true);
+  }, [
+    setBlockedAuthorIds,
+    setBootMessage,
+    setCurrentCountryCode,
+    setCurrentEmail,
+    setCurrentHasAcceptedCommunityGuidelines,
+    setCurrentIsAdmin,
+    setCurrentUserId,
+    setCurrentUsername,
+    setEpsuPopulationById,
+    setEpsus,
+    setHasHydratedAppData,
+    setHiddenEpsuIds,
+    setHostedEpsuIds,
+    setIsAuthenticated,
+    setIsBootstrapping,
+    setIsReady,
+    setIsShowingAppNotification,
+    setMemberships,
+    setModeratedEpsuIds,
+    setNotificationsEnabled,
+    setPosts,
+    setQueuedFlaggedPosts,
+    setReportedPostIds,
+    setReports,
+    setReviewedPostIdsByEpsu,
+    setUnreadAppNotifications,
+    setUserMemberships,
+    setActivePostCountByEpsu,
+  ]);
+
+  const handleLogout = React.useCallback(async () => {
+    try {
+      await rawHandleLogout();
+      applySignedOutUiState();
+    } catch (error) {
+      showAppDialog('Log out', error?.message ?? 'Could not log out');
+    }
+  }, [applySignedOutUiState, rawHandleLogout]);
+
+  const handleChangePassword = React.useCallback(async (payload) => {
+    const result = await rawHandleChangePassword(payload);
+    if (!result?.ok) {
+      return result;
+    }
+
+    try {
+      await rawHandleLogout();
+    } catch {
+      // If the provider already invalidated the session, the local UI still needs to move to signed-out state.
+    }
+
+    applySignedOutUiState();
+    showAppDialog('Change password', 'Password changed. Log in with your new password.');
+
+    return {
+      ok: true,
+      message: 'Password changed. Log in with your new password.',
+    };
+  }, [applySignedOutUiState, rawHandleChangePassword, rawHandleLogout]);
+
   useAppNotifications({
     currentUserId,
+    currentIsAdmin,
     isAuthenticated,
+    allowNotificationPrompts: !isPasswordRecovery,
     isOnline,
     notificationsEnabled,
     notificationsModule: NotificationsModule,
@@ -1128,13 +1694,17 @@ export default function App() {
 
     let isActive = true;
 
-    void fetchPosts(activeMembershipEpsuIds)
-      .then((nextPosts) => {
+    void Promise.all([
+      fetchPosts(activeMembershipEpsuIds),
+      fetchEpsuActivePostCounts(epsus.map((epsu) => epsu.id)).catch(() => ({})),
+    ])
+      .then(([nextPosts, nextActivePostCountByEpsu]) => {
         if (!isActive) {
           return;
         }
 
         setPosts(nextPosts);
+        setActivePostCountByEpsu(nextActivePostCountByEpsu);
         addNotificationDiagnostic('fullhour_post_feed_refresh', {
           notifications: nextFullhourNotifications.length,
           posts: nextPosts.length,
@@ -1152,16 +1722,123 @@ export default function App() {
     isOnline,
     unreadAppNotifications,
     userMemberships,
+    epsus,
     addNotificationDiagnostic,
   ]);
 
   useEpsuPresence({
+    currentUserId,
     epsus,
+    hasHydratedAppData,
     isAuthenticated,
+    isBootstrapping,
+    isReady,
     isOnline,
     userMemberships,
     setEpsuPopulationById,
   });
+
+  useEffect(() => {
+    if (!isOnline || !hasHydratedAppData) {
+      return undefined;
+    }
+
+    let isActive = true;
+    let refreshTimeout = null;
+
+    const refreshEpsuDirectory = async () => {
+      try {
+        if (isGuestMode && guestCountryCode) {
+          const nextGuestEpsus = await fetchGuestEpsus(guestCountryCode);
+          const nextActivePostCountByEpsu = await fetchEpsuActivePostCounts(
+            nextGuestEpsus.map((epsu) => epsu.id)
+          ).catch(() => ({}));
+
+          if (!isActive) {
+            return;
+          }
+
+          setEpsus(nextGuestEpsus);
+          setActivePostCountByEpsu(nextActivePostCountByEpsu);
+          return;
+        }
+
+        if (!isAuthenticated || !currentUserId) {
+          return;
+        }
+
+        const [
+          nextEpsus,
+          nextMemberships,
+          nextHostedEpsuIds,
+          nextModeratedEpsuIds,
+          nextHiddenEpsuIds,
+        ] = await Promise.all([
+          fetchEpsusWithCountry(),
+          fetchVisibleMemberships(currentUserId, { ensureAdminMemberships: currentIsAdmin }),
+          fetchHostedEpsuIds(currentUserId),
+          fetchModeratedEpsuIds(currentUserId),
+          fetchHiddenEpsuIds(currentUserId),
+        ]);
+
+        if (!isActive) {
+          return;
+        }
+
+        setEpsus(nextEpsus);
+        setUserMemberships(nextMemberships);
+        setHostedEpsuIds(nextHostedEpsuIds);
+        setModeratedEpsuIds(nextModeratedEpsuIds);
+        setHiddenEpsuIds(nextHiddenEpsuIds);
+        setActivePostCountByEpsu(await fetchEpsuActivePostCounts(nextEpsus.map((epsu) => epsu.id)).catch(() => ({})));
+      } catch {
+        return;
+      }
+    };
+
+    const scheduleDirectoryRefresh = () => {
+      if (refreshTimeout) {
+        clearTimeout(refreshTimeout);
+      }
+
+      refreshTimeout = setTimeout(() => {
+        refreshTimeout = null;
+        void refreshEpsuDirectory();
+      }, 500);
+    };
+
+    const channel = supabase
+      .channel(`epsu-directory:${currentUserId ?? 'guest'}:${guestCountryCode ?? 'all'}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'epsus',
+        },
+        () => {
+          scheduleDirectoryRefresh();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      isActive = false;
+      if (refreshTimeout) {
+        clearTimeout(refreshTimeout);
+      }
+      void supabase.removeChannel(channel);
+    };
+  }, [
+    currentIsAdmin,
+    currentUserId,
+    guestCountryCode,
+    hasHydratedAppData,
+    isAuthenticated,
+    isGuestMode,
+    isOnline,
+    supabase,
+  ]);
 
   useEffect(() => {
     if (!isAuthenticated || !isOnline) {
@@ -1171,17 +1848,19 @@ export default function App() {
     let isActive = true;
     let hourBoundaryTimeout = null;
     let hourRetryTimeout = null;
+    let refreshFeedTimeout = null;
+    const activeMembershipEpsuIds = userMemberships
+      .filter((membership) => membership.status === 'active' || membership.status === 'muted')
+      .map((membership) => membership.epsuId);
 
     const refreshFeedContent = async () => {
       try {
-        const activeMembershipEpsuIds = userMemberships
-          .filter((membership) => membership.status === 'active' || membership.status === 'muted')
-          .map((membership) => membership.epsuId);
-        const [nextPosts, nextQueuedFlags] = await Promise.all([
+        const [nextPosts, nextQueuedFlags, nextActivePostCountByEpsu] = await Promise.all([
           fetchPosts(activeMembershipEpsuIds).catch(() => []),
           Promise.all(
             moderatedEpsuIds.map((epsuId) => fetchFlaggedQueuedPostsForEpsu(epsuId).catch(() => []))
           ).catch(() => []),
+          fetchEpsuActivePostCounts(epsus.map((epsu) => epsu.id)).catch(() => ({})),
         ]);
 
         if (!isActive) {
@@ -1190,9 +1869,22 @@ export default function App() {
 
         setPosts(nextPosts);
         setQueuedFlaggedPosts(nextQueuedFlags.flat());
+        setActivePostCountByEpsu(nextActivePostCountByEpsu);
       } catch {
         return;
       }
+    };
+
+    const scheduleDebouncedFeedRefresh = (reason) => {
+      if (refreshFeedTimeout) {
+        clearTimeout(refreshFeedTimeout);
+      }
+
+      addNotificationDiagnostic('feed_realtime_refresh_scheduled', { reason });
+      refreshFeedTimeout = setTimeout(() => {
+        refreshFeedTimeout = null;
+        void refreshFeedContent();
+      }, 600);
     };
 
     const scheduleHourBoundaryRefresh = () => {
@@ -1210,6 +1902,57 @@ export default function App() {
     void refreshFeedContent();
     scheduleHourBoundaryRefresh();
 
+    const realtimeChannels = [
+      ...activeMembershipEpsuIds.map((epsuId) =>
+        supabase
+          .channel(`feed-posts:${currentUserId}:${epsuId}`)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'posts',
+              filter: `epsu_id=eq.${epsuId}`,
+            },
+            (payload) => {
+              const record = payload.new ?? payload.old;
+              if (!record) {
+                return;
+              }
+
+              if (record.status === 'active' || record.status === 'queued' || payload.eventType === 'DELETE') {
+                scheduleDebouncedFeedRefresh(`posts:${epsuId}:${payload.eventType}`);
+              }
+            }
+          )
+          .subscribe()
+      ),
+      ...moderatedEpsuIds.map((epsuId) =>
+        supabase
+          .channel(`feed-queued:${currentUserId}:${epsuId}`)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'posts',
+              filter: `epsu_id=eq.${epsuId}`,
+            },
+            (payload) => {
+              const record = payload.new ?? payload.old;
+              if (!record) {
+                return;
+              }
+
+              if (record.status === 'queued') {
+                scheduleDebouncedFeedRefresh(`queued:${epsuId}:${payload.eventType}`);
+              }
+            }
+          )
+          .subscribe()
+      ),
+    ];
+
     const interval = setInterval(() => {
       void refreshFeedContent();
     }, FEED_REFRESH_FALLBACK_MS);
@@ -1222,9 +1965,15 @@ export default function App() {
       if (hourRetryTimeout) {
         clearTimeout(hourRetryTimeout);
       }
+      if (refreshFeedTimeout) {
+        clearTimeout(refreshFeedTimeout);
+      }
       clearInterval(interval);
+      realtimeChannels.forEach((channel) => {
+        void supabase.removeChannel(channel);
+      });
     };
-  }, [isAuthenticated, isOnline, moderatedEpsuIds, userMemberships]);
+  }, [addNotificationDiagnostic, currentUserId, epsus, isAuthenticated, isOnline, moderatedEpsuIds, supabase, userMemberships]);
 
   const {
     handleSubmitPost,
@@ -1236,18 +1985,19 @@ export default function App() {
     handleRemoveReportedPost,
     handleMuteReportedAuthor,
     handleDemoteModerator,
-    handleKickSchoolMember,
+    handleKickEpsuMember,
     handleDeleteEpsu,
     handleEnsureInvite,
+    handleFetchInviteStatus,
     handleSubmitEpsuSuggestion,
     handleCreateSchoolEpsu,
-    handleReviewSchoolApplication,
     handleReviewPendingSchoolEpsu,
     handleReviewRegionalEpsuSuggestion,
-    handleSubmitSchoolApplication,
-    handleLeaveSchoolEpsu,
-    handleJoinRegionalEpsu,
+    handleLeaveEpsu,
+    handleJoinEpsu,
     handleReleaseQueuedPostsNow,
+    handleFetchEpsuFeedPage,
+    handleFetchPostById,
   } = useMemo(
     () =>
       createCommunityActions({
@@ -1256,11 +2006,13 @@ export default function App() {
         posts,
         currentEmail,
         currentCountryCode,
+        currentIsAdmin,
         userMemberships,
         moderatedEpsuIds,
         setPosts,
         setReviewedPostIdsByEpsu,
         setReportedPostIds,
+        setRepliedToPostIds,
         setReports,
         setMemberships,
         setUserMemberships,
@@ -1271,6 +2023,7 @@ export default function App() {
         setHiddenEpsuIds,
         setQueuedFlaggedPosts,
         setBlockedAuthorIds,
+        setActivePostCountByEpsu,
       }),
     [
       supabase,
@@ -1278,11 +2031,13 @@ export default function App() {
       posts,
       currentEmail,
       currentCountryCode,
+      currentIsAdmin,
       userMemberships,
       moderatedEpsuIds,
       setPosts,
       setReviewedPostIdsByEpsu,
       setReportedPostIds,
+      setRepliedToPostIds,
       setReports,
       setMemberships,
       setUserMemberships,
@@ -1293,33 +2048,83 @@ export default function App() {
       setHiddenEpsuIds,
       setQueuedFlaggedPosts,
       setBlockedAuthorIds,
+      setActivePostCountByEpsu,
     ]
   );
+
+  const handleGuestLockedAction = React.useCallback(() => {
+    promptGuestSignup();
+  }, [promptGuestSignup]);
+
+  const handleGuestReactToPost = React.useCallback((epsuId, postId) => {
+    setReviewedPostIdsByEpsu((current) => addReviewedPostIdByEpsu(current, epsuId, postId));
+    return { ok: true };
+  }, []);
+
+  const handleGuestFetchEpsuFeedPage = React.useCallback(async (epsuId, options = {}) => {
+    try {
+      return {
+        ok: true,
+        ...(await fetchGuestEpsuFeedPage(epsuId, options)),
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        message: error?.message ?? 'Could not load more posts',
+        posts: [],
+        hasMore: false,
+        nextOffset: options.offset ?? 0,
+      };
+    }
+  }, []);
+  const handleGuestFetchPostById = React.useCallback(async (postId, epsuId = null) => {
+    try {
+      return {
+        ok: true,
+        post: await fetchGuestPostById(postId, epsuId),
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        message: error?.message ?? 'Could not load reply context',
+        post: null,
+      };
+    }
+  }, []);
 
   const sessionValue = useMemo(() => ({
     currentUserId,
     currentUsername,
     currentEmail,
     currentIsAdmin,
-    currentCountryCode,
+    currentCountryCode: isGuestMode ? guestCountryCode : currentCountryCode,
     currentHasAcceptedCommunityGuidelines,
     currentPasswordLength,
     notificationsEnabled,
     pushRegistrationStatus,
     pushRegistrationMessage,
     notificationDiagnostics,
+    isGuestMode,
+    guestCountryCode,
+    guestSecondsLeft,
+    hasLoadedGuestTime,
   }), [
     currentUserId,
     currentUsername,
     currentIsAdmin,
     currentEmail,
     currentCountryCode,
+    guestCountryCode,
     currentHasAcceptedCommunityGuidelines,
     currentPasswordLength,
     notificationsEnabled,
     pushRegistrationStatus,
     pushRegistrationMessage,
     notificationDiagnostics,
+    guestCountryCode,
+    guestSecondsLeft,
+    hasLoadedGuestTime,
+    isGuestMode,
   ]);
 
   const dataValue = useMemo(() => ({
@@ -1327,6 +2132,7 @@ export default function App() {
     posts,
     reviewedPostIdsByEpsu,
     reportedPostIds,
+    repliedToPostIds,
     moderatedEpsuIds,
     hostedEpsuIds,
     reports,
@@ -1336,11 +2142,13 @@ export default function App() {
     userMemberships,
     hiddenEpsuIds,
     epsuPopulationById,
+    activePostCountByEpsu,
   }), [
     epsus,
     posts,
     reviewedPostIdsByEpsu,
     reportedPostIds,
+    repliedToPostIds,
     moderatedEpsuIds,
     hostedEpsuIds,
     reports,
@@ -1350,35 +2158,39 @@ export default function App() {
     userMemberships,
     hiddenEpsuIds,
     epsuPopulationById,
+    activePostCountByEpsu,
   ]);
 
   const actionsValue = useMemo(() => ({
     onLogin: handleLogin,
     onSignUp: handleSignUp,
+    onStartGuestMode: handleStartGuestMode,
+    onGuestLockedAction: handleGuestLockedAction,
     onRequestPasswordReset: handleRequestPasswordReset,
     onCompletePasswordRecovery: handleCompletePasswordRecovery,
     onLogout: handleLogout,
-    onSubmitPost: handleSubmitPost,
-    onReactToPost: handleReactToPost,
-    onReportPost: handleReportPost,
-    onBlockPostAuthor: handleBlockPostAuthor,
-    onSubmitSchoolApplication: handleSubmitSchoolApplication,
+    onSubmitPost: isGuestMode ? handleGuestLockedAction : handleSubmitPost,
+    onReactToPost: isGuestMode ? handleGuestReactToPost : handleReactToPost,
+    onReportPost: isGuestMode ? handleGuestLockedAction : handleReportPost,
+    onBlockPostAuthor: isGuestMode ? handleGuestLockedAction : handleBlockPostAuthor,
     onDismissReport: handleDismissReport,
     onDismissQueuedPost: handleDismissQueuedPost,
     onRemoveReportedPost: handleRemoveReportedPost,
     onMuteReportedAuthor: handleMuteReportedAuthor,
     onDemoteModerator: handleDemoteModerator,
-    onEnsureInvite: handleEnsureInvite,
-    onSubmitEpsuSuggestion: handleSubmitEpsuSuggestion,
-    onCreateSchoolEpsu: handleCreateSchoolEpsu,
+    onEnsureInvite: isGuestMode ? handleGuestLockedAction : handleEnsureInvite,
+    onFetchInviteStatus: isGuestMode ? handleGuestLockedAction : handleFetchInviteStatus,
+    onSubmitEpsuSuggestion: isGuestMode ? handleGuestLockedAction : handleSubmitEpsuSuggestion,
+    onCreateSchoolEpsu: isGuestMode ? handleGuestLockedAction : handleCreateSchoolEpsu,
     onDeleteEpsu: handleDeleteEpsu,
-    onJoinRegionalEpsu: handleJoinRegionalEpsu,
+    onJoinEpsu: isGuestMode ? handleGuestLockedAction : handleJoinEpsu,
     onReviewPendingSchoolEpsu: handleReviewPendingSchoolEpsu,
     onReviewRegionalEpsuSuggestion: handleReviewRegionalEpsuSuggestion,
-    onReviewSchoolApplication: handleReviewSchoolApplication,
-    onLeaveSchoolEpsu: handleLeaveSchoolEpsu,
-    onKickSchoolMember: handleKickSchoolMember,
+    onLeaveEpsu: isGuestMode ? handleGuestLockedAction : handleLeaveEpsu,
+    onKickEpsuMember: handleKickEpsuMember,
     onReleaseQueuedPostsNow: handleReleaseQueuedPostsNow,
+    onFetchEpsuFeedPage: isGuestMode ? handleGuestFetchEpsuFeedPage : handleFetchEpsuFeedPage,
+    onFetchPostById: isGuestMode ? handleGuestFetchPostById : handleFetchPostById,
     onRequestNotificationPermission: handleRequestNotificationPermission,
     onToggleNotifications: handleToggleNotifications,
     onChangePassword: handleChangePassword,
@@ -1389,30 +2201,36 @@ export default function App() {
   }), [
     handleLogin,
     handleSignUp,
+    handleStartGuestMode,
+    handleGuestLockedAction,
     handleRequestPasswordReset,
     handleCompletePasswordRecovery,
     handleLogout,
+    handleGuestReactToPost,
     handleSubmitPost,
     handleReactToPost,
     handleReportPost,
     handleBlockPostAuthor,
-    handleSubmitSchoolApplication,
     handleDismissReport,
     handleDismissQueuedPost,
     handleRemoveReportedPost,
     handleMuteReportedAuthor,
     handleDemoteModerator,
     handleEnsureInvite,
+    handleFetchInviteStatus,
     handleSubmitEpsuSuggestion,
     handleCreateSchoolEpsu,
     handleDeleteEpsu,
-    handleJoinRegionalEpsu,
+    handleJoinEpsu,
     handleReviewPendingSchoolEpsu,
     handleReviewRegionalEpsuSuggestion,
-    handleReviewSchoolApplication,
-    handleLeaveSchoolEpsu,
-    handleKickSchoolMember,
+    handleLeaveEpsu,
+    handleKickEpsuMember,
     handleReleaseQueuedPostsNow,
+    handleGuestFetchEpsuFeedPage,
+    handleGuestFetchPostById,
+    handleFetchEpsuFeedPage,
+    handleFetchPostById,
     handleRequestNotificationPermission,
     handleToggleNotifications,
     handleChangePassword,
@@ -1420,71 +2238,110 @@ export default function App() {
     handleConfirmDeleteAccount,
     handleFetchAccountHistory,
     handleAcceptCommunityGuidelines,
+    isGuestMode,
   ]);
 
   if (!isReady || !fontsLoaded || hasCompletedIntro == null) {
-    return <BootScreen message={bootMessage} />;
+    return (
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <BootScreen message={bootMessage} />
+          <AppDialogHost />
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    );
+  }
+
+  if (isPasswordRecovery) {
+    return (
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <AppProvider sessionValue={sessionValue} dataValue={dataValue} actionsValue={actionsValue}>
+            <ResetPasswordScreen
+              onCompletePasswordRecovery={handleCompletePasswordRecovery}
+              onDone={async () => {
+                setIsPasswordRecovery(false);
+                try {
+                  await rawHandleLogout();
+                } catch {
+                  // Ignore cleanup errors here; the goal is to leave recovery mode signed out.
+                } finally {
+                  applySignedOutUiState();
+                  showAppDialog('Reset password', 'Password updated. Log in with your new password.');
+                }
+              }}
+            />
+          </AppProvider>
+          <AppDialogHost />
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    );
   }
 
   if (isCompletingAuthLink) {
-    return <BootScreen title="Confirming your email" message="Signing you in to Epsu" />;
+    return (
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <BootScreen title="Confirming your email" message="Signing you in to Epsu" />
+          <AppDialogHost />
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    );
   }
 
-  if (isAuthenticated && isBootstrapping && !hasHydratedAppData) {
-    return <BootScreen title="Loading your space" message={bootMessage || 'Preparing your feed'} />;
+  if ((isAuthenticated && isBootstrapping && !hasHydratedAppData) || (isGuestMode && isGuestBootstrapping)) {
+    return (
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <BootScreen title="Loading your space" message={bootMessage || 'Preparing your feed'} />
+          <AppDialogHost />
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    );
   }
 
-  const showIntro = !isAuthenticated && !hasCompletedIntro;
+  const showIntro = !isAuthenticated && !isGuestMode && !hasCompletedIntro;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <AppProvider sessionValue={sessionValue} dataValue={dataValue} actionsValue={actionsValue}>
-          {isPasswordRecovery ? (
-            <ResetPasswordScreen
-              onCompletePasswordRecovery={handleCompletePasswordRecovery}
-              onDone={() => {
-                setIsPasswordRecovery(false);
-                showAppDialog('Reset password', 'Password updated');
-              }}
-            />
+          {!isOnline ? (
+            <OfflineGate />
           ) : (
-            !isOnline ? (
-              <OfflineGate />
-            ) : (
-              <NavigationContainer>
-                {isAuthenticated ? (
-                  <MainTabs />
-                ) : showIntro ? (
-                  <Stack.Navigator
-                    key="intro-stack"
-                    initialRouteName="IntroBurger"
-                    screenOptions={{
-                      headerShown: false,
-                      contentStyle: { backgroundColor: '#e52b50' },
-                    }}
-                  >
-                    <Stack.Screen name="IntroBurger" component={IntroBurgerScreen} />
-                    <Stack.Screen name="IntroPizza">
-                      {(props) => <IntroPizzaScreen {...props} onCompleteIntro={handleCompleteIntro} />}
-                    </Stack.Screen>
-                  </Stack.Navigator>
-                ) : (
-                  <Stack.Navigator
-                    key={`auth-${authEntryScreen}`}
-                    initialRouteName={authEntryScreen}
-                    screenOptions={{
-                      headerShown: false,
-                      contentStyle: { backgroundColor: '#e52b50' },
-                    }}
-                  >
-                    <Stack.Screen name="Login" component={LoginAppScreen} />
-                    <Stack.Screen name="ForgotPassword" component={ForgotPasswordAppScreen} />
-                    <Stack.Screen name="SignUp" component={SignUpAppScreen} />
-                  </Stack.Navigator>
-                )}
-              </NavigationContainer>
-            )
+            <NavigationContainer>
+              {isAuthenticated || isGuestMode ? (
+                <MainTabs />
+              ) : showIntro ? (
+                <Stack.Navigator
+                  key="intro-stack"
+                  initialRouteName="IntroBurger"
+                  screenOptions={{
+                    headerShown: false,
+                    contentStyle: { backgroundColor: '#e52b50' },
+                  }}
+                >
+                  <Stack.Screen name="IntroBurger" component={IntroBurgerScreen} />
+                  <Stack.Screen name="IntroPizza">
+                    {(props) => <IntroPizzaScreen {...props} onCompleteIntro={handleCompleteIntro} />}
+                  </Stack.Screen>
+                </Stack.Navigator>
+              ) : (
+                <Stack.Navigator
+                  key={`auth-${authEntryScreen}`}
+                  initialRouteName={authEntryScreen}
+                  screenOptions={{
+                    headerShown: false,
+                    contentStyle: { backgroundColor: '#e52b50' },
+                  }}
+                >
+                  <Stack.Screen name="Login" component={LoginAppScreen} />
+                  <Stack.Screen name="ForgotPassword" component={ForgotPasswordAppScreen} />
+                  <Stack.Screen name="SignUp" component={SignUpAppScreen} />
+                  <Stack.Screen name="GuestMode" component={GuestModeAppScreen} />
+                </Stack.Navigator>
+              )}
+            </NavigationContainer>
           )}
         </AppProvider>
         <AppDialogHost />

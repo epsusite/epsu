@@ -14,9 +14,14 @@ import {
 import { TouchableOpacity } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { showAppDialog } from './components/AppDialog';
+import { UI } from './lib/uiTheme';
 import useSubmitButtonAnimation from './lib/useSubmitButtonAnimation';
 
 const SCHOOL_TEXT_DRAFT_KEY = 'rent_epsu_text_draft';
+const MIN_SCHOOL_NAME_LENGTH = 2;
+const MAX_SCHOOL_NAME_LENGTH = 100;
+const MIN_SCHOOL_WEBSITE_LENGTH = 2;
+const MAX_SCHOOL_WEBSITE_LENGTH = 100;
 
 function isLikelyWebsite(value) {
   const trimmed = value.trim().toLowerCase();
@@ -41,9 +46,34 @@ function isLikelyWebsite(value) {
   }
 }
 
+function validateSchoolWebsite(value) {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return 'Website is required';
+  }
+
+  if (trimmed.length < MIN_SCHOOL_WEBSITE_LENGTH) {
+    return `Website must be at least ${MIN_SCHOOL_WEBSITE_LENGTH} characters`;
+  }
+
+  if (trimmed.length > MAX_SCHOOL_WEBSITE_LENGTH) {
+    return `Website must be ${MAX_SCHOOL_WEBSITE_LENGTH} characters or fewer`;
+  }
+
+  if (!isLikelyWebsite(trimmed)) {
+    return 'Enter a valid website';
+  }
+
+  return '';
+}
+
 export default function RentEpsuScreen({
   navigation,
+  currentIsAdmin = false,
+  epsus = [],
   onCreateSchoolEpsu,
+  userMemberships = [],
 }) {
   const insets = useSafeAreaInsets();
   const [schoolName, setSchoolName] = useState('');
@@ -52,8 +82,28 @@ export default function RentEpsuScreen({
   const [isDraftReady, setIsDraftReady] = useState(false);
   const trimmedSchoolName = useMemo(() => schoolName.trim(), [schoolName]);
   const trimmedWebsite = useMemo(() => website.trim(), [website]);
-  const hasValidWebsite = useMemo(() => isLikelyWebsite(trimmedWebsite), [trimmedWebsite]);
-  const canSubmit = trimmedSchoolName.length >= 2 && hasValidWebsite;
+  const websiteValidationError = useMemo(() => validateSchoolWebsite(trimmedWebsite), [trimmedWebsite]);
+  const hasValidWebsite = websiteValidationError === '';
+  const approvedSchoolMembershipCount = useMemo(() => {
+    if (currentIsAdmin) {
+      return 0;
+    }
+
+    const membershipByEpsuId = new Map(userMemberships.map((membership) => [membership.epsuId, membership]));
+    return epsus.filter((epsu) => {
+      const membership = membershipByEpsuId.get(epsu.id);
+      return (
+        membership &&
+        ['active', 'muted', 'invited'].includes(membership.status) &&
+        epsu.scope === 'school' &&
+        epsu.review_status === 'approved'
+      );
+    }).length;
+  }, [currentIsAdmin, epsus, userMemberships]);
+  const canSubmit =
+    trimmedSchoolName.length >= MIN_SCHOOL_NAME_LENGTH &&
+    trimmedSchoolName.length <= MAX_SCHOOL_NAME_LENGTH &&
+    hasValidWebsite;
   const submitAnimationStyle = useSubmitButtonAnimation(canSubmit);
 
   useEffect(() => {
@@ -106,7 +156,15 @@ export default function RentEpsuScreen({
     }
 
     if (!hasValidWebsite) {
-      setWebsiteError('Enter a valid website');
+      setWebsiteError(websiteValidationError);
+      return;
+    }
+
+    if (approvedSchoolMembershipCount >= 3) {
+      showAppDialog(
+        'Maximum school Epsu limit reached',
+        'You already are a member of maximum amount of school Epsus. Leave from one in order to create a new Epsu.'
+      );
       return;
     }
 
@@ -116,7 +174,7 @@ export default function RentEpsuScreen({
     });
 
     if (!result?.ok) {
-      showAppDialog('Add new school', result?.message ?? 'Could not create school Epsu');
+      showAppDialog('Create school Epsu', result?.message ?? 'Could not create school Epsu');
       return;
     }
 
@@ -129,7 +187,7 @@ export default function RentEpsuScreen({
   };
 
   if (!isDraftReady) {
-    return <View style={[styles.screen, { backgroundColor: '#fff8fb' }]} />;
+    return <View style={styles.screen} />;
   }
 
   return (
@@ -141,53 +199,48 @@ export default function RentEpsuScreen({
         contentContainerStyle={[styles.content, { paddingTop: insets.top + 12 }]}
         keyboardShouldPersistTaps="always"
       >
-        <Text style={styles.sectionEyebrow}>Add new school</Text>
+        <Text style={styles.sectionEyebrow}>Create school Epsu</Text>
         <Text style={styles.sectionTitle}>Does your school have an Epsu?</Text>
         <Text style={styles.helper}>
-          Write the school name and website address. Administration will choose the logo if the school is approved
+          Type the name of the school and their website. This data must be accurate and spelt correctly, otherwise this Epsu won&apos;t be created. Trial Epsu must get 14 members in 7 days after launch to become permanent
         </Text>
 
         <Text style={styles.inputLabel}>School name</Text>
         <TextInput
           style={styles.input}
-          placeholder="Massachusetts Institute of Technology"
+          placeholder="Example: Massachusetts Institute of Technology"
           placeholderTextColor="#8d6676"
           value={schoolName}
           onChangeText={setSchoolName}
+          maxLength={MAX_SCHOOL_NAME_LENGTH}
           autoCapitalize="words"
           autoCorrect={false}
           autoComplete="off"
         />
 
         <Text style={styles.inputLabel}>School website</Text>
-        <View style={styles.websiteInputWrap}>
-          <Text style={styles.websitePrefix}>https://</Text>
-          <TextInput
-            style={styles.websiteInput}
-            placeholder="web.mit.edu"
-            placeholderTextColor="#8d6676"
-            value={website}
-            onChangeText={(value) => {
-              setWebsite(value);
-              if (websiteError) {
-                setWebsiteError(isLikelyWebsite(value.trim()) ? '' : 'Enter a valid website');
-              }
-            }}
-            onBlur={() => {
-              if (trimmedWebsite && !hasValidWebsite) {
-                setWebsiteError('Enter a valid website');
-              } else {
-                setWebsiteError('');
-              }
-            }}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="url"
-            autoComplete="off"
-            textContentType="none"
-            importantForAutofill="no"
-          />
-        </View>
+        <TextInput
+          style={styles.input}
+          placeholder="Example: mit.edu"
+          placeholderTextColor="#8d6676"
+          value={website}
+          onChangeText={(value) => {
+            setWebsite(value);
+            if (websiteError) {
+              setWebsiteError(validateSchoolWebsite(value));
+            }
+          }}
+          onBlur={() => {
+            setWebsiteError(validateSchoolWebsite(website));
+          }}
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="url"
+          autoComplete="off"
+          textContentType="none"
+          importantForAutofill="no"
+          maxLength={MAX_SCHOOL_WEBSITE_LENGTH}
+        />
         {websiteError ? <Text style={styles.errorText}>{websiteError}</Text> : null}
       </ScrollView>
 
@@ -212,86 +265,65 @@ export default function RentEpsuScreen({
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#fff8fb',
+    backgroundColor: UI.colors.background,
   },
   content: {
-    paddingHorizontal: 18,
+    paddingHorizontal: UI.spacing.screen,
     paddingBottom: 110,
     gap: 16,
   },
   sectionEyebrow: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#8d6676',
+    color: UI.colors.textSoft,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
   },
   sectionTitle: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '900',
-    color: '#20131a',
+    color: UI.colors.text,
   },
   helper: {
     fontSize: 15,
     lineHeight: 22,
-    color: '#7a5968',
+    color: UI.colors.textMuted,
   },
   input: {
     minHeight: 56,
-    borderRadius: 16,
-    backgroundColor: '#fff',
+    borderRadius: UI.radius.row,
+    backgroundColor: UI.colors.surface,
     borderWidth: 1,
-    borderColor: '#f3d0dd',
+    borderColor: UI.colors.border,
     paddingHorizontal: 16,
     paddingVertical: 16,
     fontSize: 16,
-    color: '#24171d',
+    color: UI.colors.text,
   },
   inputLabel: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#8d6676',
+    color: UI.colors.textSoft,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
     marginBottom: -8,
   },
-  websiteInputWrap: {
-    minHeight: 56,
-    borderRadius: 16,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#f3d0dd',
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  websitePrefix: {
-    color: '#8d6676',
-    fontSize: 16,
-    fontWeight: '700',
-    marginRight: 4,
-  },
-  websiteInput: {
-    flex: 1,
-    paddingVertical: 16,
-    fontSize: 16,
-    color: '#24171d',
-  },
   errorText: {
-    color: '#d72647',
+    color: UI.colors.danger,
     fontSize: 13,
     fontWeight: '700',
     marginTop: -6,
   },
   submitWrap: {
     position: 'absolute',
-    left: 18,
-    right: 18,
+    left: UI.spacing.screen,
+    right: UI.spacing.screen,
     bottom: 0,
   },
   submitButton: {
-    backgroundColor: '#e52b50',
-    borderRadius: 16,
+    minHeight: 56,
+    backgroundColor: UI.colors.primary,
+    borderRadius: UI.radius.row,
     paddingVertical: 16,
     alignItems: 'center',
     shadowColor: '#000',
@@ -301,7 +333,7 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   submitText: {
-    color: '#fff',
+    color: UI.colors.surface,
     fontSize: 16,
     fontWeight: '900',
     letterSpacing: 0.4,

@@ -13,6 +13,7 @@ import {
 import { TouchableOpacity } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { showAppDialog } from './components/AppDialog';
+import { UI } from './lib/uiTheme';
 import useSubmitButtonAnimation from './lib/useSubmitButtonAnimation';
 
 function getCounterText(length, minLength, maxLength) {
@@ -114,28 +115,29 @@ export default function DeleteEpsuScreen({ navigation, route, onDeleteEpsu, epsu
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#fff8fb',
+    backgroundColor: UI.colors.background,
   },
   content: {
-    paddingHorizontal: 18,
+    paddingHorizontal: UI.spacing.screen,
     paddingBottom: 110,
     gap: 18,
   },
   sectionEyebrow: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#8d6676',
+    color: UI.colors.textSoft,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
   },
   sectionTitle: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '900',
-    color: '#20131a',
+    color: UI.colors.text,
   },
   hint: {
     fontSize: 15,
-    color: '#7a5968',
+    lineHeight: 22,
+    color: UI.colors.textMuted,
   },
   fieldBlock: {
     gap: 8,
@@ -143,29 +145,30 @@ const styles = StyleSheet.create({
   counter: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#8a5e70',
+    color: UI.colors.textSoft,
   },
   input: {
     minHeight: 56,
-    borderRadius: 16,
-    backgroundColor: '#fff',
+    borderRadius: UI.radius.row,
+    backgroundColor: UI.colors.surface,
     borderWidth: 1,
-    borderColor: '#f3d0dd',
+    borderColor: UI.colors.border,
     paddingHorizontal: 16,
     paddingVertical: 16,
     fontSize: 16,
-    color: '#24171d',
+    color: UI.colors.text,
     fontWeight: '600',
   },
   submitWrap: {
     position: 'absolute',
-    left: 18,
-    right: 18,
+    left: UI.spacing.screen,
+    right: UI.spacing.screen,
     bottom: 0,
   },
   submitButton: {
-    backgroundColor: '#d72647',
-    borderRadius: 16,
+    minHeight: 56,
+    backgroundColor: UI.colors.danger,
+    borderRadius: UI.radius.row,
     paddingVertical: 16,
     alignItems: 'center',
     shadowColor: '#000',
@@ -178,7 +181,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#b97a8a',
   },
   submitText: {
-    color: '#fff',
+    color: UI.colors.surface,
     fontSize: 16,
     fontWeight: '900',
     letterSpacing: 0.4,

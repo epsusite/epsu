@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { TouchableOpacity } from 'react-native-gesture-handler';
+import { UI } from './lib/uiTheme';
 
 export default function ForgotPasswordScreen({ navigation, route, onRequestPasswordReset }) {
   const [email, setEmail] = useState(route.params?.email ?? '');
@@ -47,6 +48,7 @@ export default function ForgotPasswordScreen({ navigation, route, onRequestPassw
         >
           <View style={styles.inner}>
             <Text style={styles.title}>Reset password</Text>
+            <Text style={styles.helperText}>We will send password reset to your email, remember to check under spam!</Text>
 
             <View style={styles.fieldWrapper}>
               <TextInput
@@ -96,21 +98,28 @@ export default function ForgotPasswordScreen({ navigation, route, onRequestPassw
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#e52b50' },
   bg: { flex: 1 },
-  overlay: { flex: 1, justifyContent: 'flex-end', paddingBottom: 36 },
-  inner: { marginHorizontal: 28 },
+  overlay: { flex: 1, justifyContent: 'flex-end', paddingBottom: UI.auth.screenPaddingBottom },
+  inner: { marginHorizontal: UI.auth.horizontalPadding },
   title: {
-    fontSize: 36,
+    fontSize: UI.auth.titleSize,
     fontWeight: '900',
     color: '#fff',
-    marginBottom: 12,
+    marginBottom: 16,
     letterSpacing: -0.5,
   },
-  fieldWrapper: { marginBottom: 16 },
+  helperText: {
+    color: '#fff',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '600',
+    marginBottom: 24,
+  },
+  fieldWrapper: { marginBottom: UI.auth.fieldGap },
   input: {
     backgroundColor: '#e52b50',
-    borderRadius: 16,
+    borderRadius: UI.auth.inputRadius,
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    minHeight: UI.auth.inputMinHeight,
     fontSize: 16,
     color: '#fff',
     fontWeight: '500',
@@ -141,10 +150,10 @@ const styles = StyleSheet.create({
   },
   button: {
     backgroundColor: '#e52b50',
-    borderRadius: 16,
+    borderRadius: UI.auth.inputRadius,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 15,
+    minHeight: UI.auth.buttonMinHeight,
     marginTop: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -160,7 +169,13 @@ const styles = StyleSheet.create({
   },
   linkWrapper: {
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: UI.auth.linkGap,
+    alignSelf: 'center',
+    backgroundColor: '#e52b50',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    minHeight: UI.auth.pillMinHeight,
+    justifyContent: 'center',
   },
   linkText: {
     color: '#fff',

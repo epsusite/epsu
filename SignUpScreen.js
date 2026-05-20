@@ -1,40 +1,36 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ImageBackground,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { TouchableOpacity } from 'react-native-gesture-handler';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as WebBrowser from 'expo-web-browser';
+import AppCheckboxRow from './components/AppCheckboxRow';
 import CountryPickerModal from './components/CountryPickerModal';
+import GuestModeBubble from './components/GuestModeBubble';
 import { showAppDialog } from './components/AppDialog';
 import { findCountryByCode } from './lib/countries';
 import { isValidCountryCode, normalizeCountryCode } from './lib/countryCode';
+import { UI } from './lib/uiTheme';
 
 const TERMS_URL = 'https://epsu.site/terms';
 const PRIVACY_URL = 'https://epsu.site/privacy';
 const MIN_PASSWORD_LENGTH = 8;
 const MAX_PASSWORD_LENGTH = 64;
 
-function CheckboxRow({ checked, children, onPress }) {
-  return (
-    <Pressable style={styles.checkboxRow} onPress={onPress}>
-      <View style={[styles.checkboxBox, checked && styles.checkboxBoxChecked]}>
-        {checked ? <Text style={styles.checkboxTick}>✓</Text> : null}
-      </View>
-      <Text style={styles.checkboxText}>{children}</Text>
-    </Pressable>
-  );
-}
-
-export default function SignUpScreen({ navigation, onSignUp }) {
+export default function SignUpScreen({ navigation, onSignUp, showGuestModeBubble = true }) {
+  const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [countryCode, setCountryCode] = useState('');
@@ -48,6 +44,16 @@ export default function SignUpScreen({ navigation, onSignUp }) {
   const [termsError, setTermsError] = useState('');
   const [generalError, setGeneralError] = useState('');
   const [pendingConfirmationEmail, setPendingConfirmationEmail] = useState('');
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', () => setIsKeyboardVisible(true));
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => setIsKeyboardVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const getPasswordStrength = () => {
     if (password.length === 0) return null;
@@ -197,6 +203,20 @@ export default function SignUpScreen({ navigation, onSignUp }) {
           style={styles.overlay}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
+          <View
+            style={[
+              styles.topBubbleWrap,
+              {
+                top: insets.top + 6,
+                left: Math.max(16, Math.min(28, Math.round(windowWidth * 0.06))),
+              },
+            ]}
+          >
+            <GuestModeBubble
+              visible={showGuestModeBubble && !isKeyboardVisible}
+              onPress={() => navigation.navigate('GuestMode')}
+            />
+          </View>
           <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="always">
             <View style={styles.inner}>
               {pendingConfirmationEmail ? (
@@ -230,7 +250,10 @@ export default function SignUpScreen({ navigation, onSignUp }) {
                         setEmail(val);
                         if (emailError) setEmailError(validateEmail(val));
                       }}
-                      onBlur={() => setEmailError(validateEmail(email))}
+                      onBlur={() => {
+                        const error = validateEmail(email);
+                        if (error) setEmailError(error);
+                      }}
                     />
                     {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
                   </View>
@@ -248,7 +271,8 @@ export default function SignUpScreen({ navigation, onSignUp }) {
                         if (passwordError) setPasswordError(validatePassword(val));
                       }}
                       onBlur={() => {
-                        setPasswordError(validatePassword(password));
+                        const error = validatePassword(password);
+                        if (error) setPasswordError(error);
                       }}
                     />
                     {password.length > 0 ? (
@@ -286,7 +310,7 @@ export default function SignUpScreen({ navigation, onSignUp }) {
                   </View>
 
                   <View style={styles.fieldWrapper}>
-                    <CheckboxRow
+                    <AppCheckboxRow
                       checked={isThirteenOrOlder}
                       onPress={() => {
                         const nextValue = !isThirteenOrOlder;
@@ -295,14 +319,15 @@ export default function SignUpScreen({ navigation, onSignUp }) {
                           setAgeError(validateAgeConfirmation(nextValue));
                         }
                       }}
+                      theme="dark"
                     >
                       I am 13 or older
-                    </CheckboxRow>
+                    </AppCheckboxRow>
                     {ageError ? <Text style={styles.errorText}>{ageError}</Text> : null}
                   </View>
 
                   <View style={styles.fieldWrapper}>
-                    <CheckboxRow
+                    <AppCheckboxRow
                       checked={acceptedTerms}
                       onPress={() => {
                         const nextValue = !acceptedTerms;
@@ -311,6 +336,7 @@ export default function SignUpScreen({ navigation, onSignUp }) {
                           setTermsError(validateTerms(nextValue));
                         }
                       }}
+                      theme="dark"
                     >
                       By continuing, you agree to Epsu&apos;s{' '}
                       <Text style={styles.inlineLink} onPress={() => openDocument(TERMS_URL)}>
@@ -320,7 +346,7 @@ export default function SignUpScreen({ navigation, onSignUp }) {
                       <Text style={styles.inlineLink} onPress={() => openDocument(PRIVACY_URL)}>
                         Privacy Policy
                       </Text>
-                    </CheckboxRow>
+                    </AppCheckboxRow>
                     {termsError ? <Text style={styles.errorText}>{termsError}</Text> : null}
                   </View>
 
@@ -360,15 +386,30 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#e52b50' },
   bg: { flex: 1 },
   overlay: { flex: 1 },
-  scrollContent: { flexGrow: 1, justifyContent: 'flex-end', paddingTop: 28, paddingBottom: 36 },
-  inner: { marginHorizontal: 28 },
-  title: { fontSize: 36, fontWeight: '900', color: '#fff', marginBottom: 32, letterSpacing: -0.5 },
-  fieldWrapper: { marginBottom: 16 },
+  topBubbleWrap: {
+    position: 'absolute',
+    zIndex: 3,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'flex-end',
+    paddingTop: 28,
+    paddingBottom: UI.auth.screenPaddingBottom,
+  },
+  inner: { marginHorizontal: UI.auth.horizontalPadding },
+  title: {
+    fontSize: UI.auth.titleSize,
+    fontWeight: '900',
+    color: '#fff',
+    marginBottom: UI.auth.titleSpacing,
+    letterSpacing: -0.5,
+  },
+  fieldWrapper: { marginBottom: UI.auth.fieldGap },
   input: {
     backgroundColor: '#e52b50',
-    borderRadius: 16,
+    borderRadius: UI.auth.inputRadius,
+    minHeight: UI.auth.inputMinHeight,
     paddingHorizontal: 16,
-    paddingVertical: 14,
     fontSize: 16,
     color: '#fff',
     fontWeight: '500',
@@ -412,37 +453,6 @@ const styles = StyleSheet.create({
   strengthBarBg: { flex: 1, height: 4, backgroundColor: 'rgba(255,255,255,0.25)', borderRadius: 2, overflow: 'hidden' },
   strengthBarFill: { height: '100%', borderRadius: 2 },
   strengthLabel: { fontSize: 11, fontWeight: '700', width: 50, textAlign: 'right' },
-  checkboxRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-  },
-  checkboxBox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 2,
-    flexShrink: 0,
-  },
-  checkboxBoxChecked: {
-    backgroundColor: '#fff',
-  },
-  checkboxTick: {
-    color: '#e52b50',
-    fontSize: 14,
-    fontWeight: '900',
-  },
-  checkboxText: {
-    color: '#fff',
-    fontSize: 14,
-    lineHeight: 20,
-    flex: 1,
-    fontWeight: '600',
-  },
   inlineLink: {
     textDecorationLine: 'underline',
     fontWeight: '800',
@@ -461,9 +471,10 @@ const styles = StyleSheet.create({
   },
   button: {
     backgroundColor: '#e52b50',
-    borderRadius: 16,
-    paddingVertical: 15,
+    borderRadius: UI.auth.inputRadius,
+    minHeight: UI.auth.buttonMinHeight,
     alignItems: 'center',
+    justifyContent: 'center',
     marginTop: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -474,12 +485,13 @@ const styles = StyleSheet.create({
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 0.4 },
   linkWrapper: {
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: UI.auth.linkGap,
     alignSelf: 'center',
     backgroundColor: '#e52b50',
     borderRadius: 999,
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    minHeight: UI.auth.pillMinHeight,
+    justifyContent: 'center',
   },
   linkText: {
     color: '#fff',
@@ -495,3 +507,4 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
 });
+

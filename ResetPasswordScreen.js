@@ -11,7 +11,9 @@ import {
   View,
 } from 'react-native';
 import { TouchableOpacity } from 'react-native-gesture-handler';
+import { UI } from './lib/uiTheme';
 
+const MIN_PASSWORD_LENGTH = 8;
 const MAX_PASSWORD_LENGTH = 64;
 
 export default function ResetPasswordScreen({ onCompletePasswordRecovery, onDone }) {
@@ -19,6 +21,15 @@ export default function ResetPasswordScreen({ onCompletePasswordRecovery, onDone
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const getPasswordStrength = () => {
+    if (password.length === 0) return null;
+    if (password.length < MIN_PASSWORD_LENGTH) return { label: 'Too short', color: '#ff6b6b', width: '30%' };
+    if (password.length < 12) return { label: 'Fair', color: '#ffd93d', width: '60%' };
+    return { label: 'Strong', color: '#6bcb77', width: '100%' };
+  };
+
+  const strength = getPasswordStrength();
 
   const handleSubmit = async () => {
     setError('');
@@ -71,6 +82,24 @@ export default function ResetPasswordScreen({ onCompletePasswordRecovery, onDone
                   if (error) setError('');
                 }}
               />
+              {password.length > 0 ? (
+                <View style={styles.passwordMetaRow}>
+                  <View style={styles.strengthWrapper}>
+                    <View style={styles.strengthBarBg}>
+                      <View
+                        style={[
+                          styles.strengthBarFill,
+                          { width: strength?.width, backgroundColor: strength?.color },
+                        ]}
+                      />
+                    </View>
+                    <Text style={[styles.strengthLabel, { color: strength?.color }]}>
+                      {strength?.label}
+                    </Text>
+                  </View>
+                  <Text style={styles.passwordCount}>{password.length}/{MAX_PASSWORD_LENGTH}</Text>
+                </View>
+              ) : null}
             </View>
 
             <View style={styles.fieldWrapper}>
@@ -111,27 +140,61 @@ export default function ResetPasswordScreen({ onCompletePasswordRecovery, onDone
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#e52b50' },
   bg: { flex: 1 },
-  overlay: { flex: 1, justifyContent: 'flex-end', paddingBottom: 36 },
-  inner: { marginHorizontal: 28 },
+  overlay: { flex: 1, justifyContent: 'flex-end', paddingBottom: UI.auth.screenPaddingBottom },
+  inner: { marginHorizontal: UI.auth.horizontalPadding },
   title: {
-    fontSize: 36,
+    fontSize: UI.auth.titleSize,
     fontWeight: '900',
     color: '#fff',
-    marginBottom: 12,
+    marginBottom: 16,
   },
   helperText: {
-    color: 'rgba(255,255,255,0.84)',
-    fontSize: 14,
-    lineHeight: 20,
+    color: '#fff',
+    fontSize: 15,
+    lineHeight: 22,
     marginBottom: 24,
     fontWeight: '600',
   },
-  fieldWrapper: { marginBottom: 16 },
+  fieldWrapper: { marginBottom: UI.auth.fieldGap },
+  passwordMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+    gap: 12,
+  },
+  strengthWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  strengthBarBg: {
+    flex: 1,
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    overflow: 'hidden',
+    marginRight: 8,
+  },
+  strengthBarFill: {
+    height: '100%',
+    borderRadius: 999,
+  },
+  strengthLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    minWidth: 58,
+  },
+  passwordCount: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   input: {
     backgroundColor: '#e52b50',
-    borderRadius: 16,
+    borderRadius: UI.auth.inputRadius,
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    minHeight: UI.auth.inputMinHeight,
     fontSize: 16,
     color: '#fff',
     fontWeight: '500',
@@ -150,8 +213,8 @@ const styles = StyleSheet.create({
   },
   button: {
     backgroundColor: '#e52b50',
-    borderRadius: 16,
-    minHeight: 50,
+    borderRadius: UI.auth.inputRadius,
+    minHeight: UI.auth.buttonMinHeight,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 8,

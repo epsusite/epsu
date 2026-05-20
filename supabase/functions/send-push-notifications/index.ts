@@ -295,6 +295,7 @@ Deno.serve(async (request) => {
     `)
     .is('push_sent_at', null)
     .is('read_at', null)
+    .neq('kind', 'post_removed_silent')
     .eq('profiles.notifications_enabled', true)
     .order('created_at', { ascending: true })
     .limit(BATCH_SIZE);

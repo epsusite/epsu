@@ -14,10 +14,8 @@ Working draft for the Play Console Data Safety form, based on the current codeba
 - Posts
 - Replies
 - Reports
-- School application answers
 - Epsu suggestions
 - Uploaded school logos
-- Account correction requests
 
 ### App info and performance
 - No dedicated analytics or crash-reporting SDK is currently implemented in the app code

@@ -1,6 +1,7 @@
 {
   "cli": {
-    "version": ">= 16.13.0"
+    "version": ">= 16.13.0",
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
@@ -40,12 +41,24 @@
     "production": {
       "distribution": "store",
       "channel": "production",
+      "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://xzgzzuxmtjrppavvynuy.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_Zdk74tVkgkJgBJjEVazaRw_Mlb8le9L"
       },
       "android": {
         "buildType": "app-bundle"
+      }
+    },
+    "ownershipProof": {
+      "distribution": "store",
+      "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://xzgzzuxmtjrppavvynuy.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_Zdk74tVkgkJgBJjEVazaRw_Mlb8le9L"
+      },
+      "android": {
+        "buildType": "apk"
       }
     }
   }

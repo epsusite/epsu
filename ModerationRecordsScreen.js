@@ -1,21 +1,21 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { FlatList, StyleSheet, Text, TextInput, View } from 'react-native';
 import { TouchableOpacity } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { fetchModerationRecords } from './lib/api/moderation';
+import { UI } from './lib/uiTheme';
 
 const FILTER_OPTIONS = [
   { key: 'all', label: 'All' },
   { key: 'dismiss_report', label: 'Dismissed report' },
   { key: 'mute_author_24h', label: 'Muted author for 24h' },
   { key: 'remove_post', label: 'Removed post' },
-  { key: 'change_member_role', label: 'Changed member role' },
-  { key: 'change_member_status', label: 'Changed member status' },
-  { key: 'kick_school_member', label: 'Kicked school member' },
-  { key: 'generate_invite', label: 'Generated invite' },
-  { key: 'delete_epsu', label: 'Deleted Epsu' },
-  { key: 'review_school_application', label: 'Reviewed school application' },
+  { key: 'change_member_role', label: 'Changed member permission' },
+  { key: 'change_member_status', label: 'Changed membership state' },
+  { key: 'kick_school_member', label: 'Kicked member' },
+  { key: 'redeem_invite', label: 'Accepted invite' },
 ];
 
 const DATE_RANGE_OPTIONS = [
@@ -39,27 +39,19 @@ function formatAction(actionType) {
   }
 
   if (actionType === 'change_member_role') {
-    return 'Changed member role';
+    return 'Changed member permission';
   }
 
   if (actionType === 'change_member_status') {
-    return 'Changed member status';
+    return 'Changed membership state';
   }
 
   if (actionType === 'kick_school_member') {
-    return 'Kicked school member';
+    return 'Kicked member';
   }
 
-  if (actionType === 'generate_invite') {
-    return 'Generated invite';
-  }
-
-  if (actionType === 'delete_epsu') {
-    return 'Deleted Epsu';
-  }
-
-  if (actionType === 'review_school_application') {
-    return 'Reviewed school application';
+  if (actionType === 'redeem_invite') {
+    return 'Accepted invite';
   }
 
   return actionType;
@@ -149,7 +141,7 @@ export default function ModerationRecordsScreen({ route, epsus }) {
   const [targetQuery, setTargetQuery] = useState('');
   const [detailsQuery, setDetailsQuery] = useState('');
 
-  useEffect(() => {
+  const loadRecords = React.useCallback(() => {
     let isActive = true;
 
     fetchModerationRecords(epsuId)
@@ -168,6 +160,18 @@ export default function ModerationRecordsScreen({ route, epsus }) {
       isActive = false;
     };
   }, [epsuId]);
+
+  useEffect(() => {
+    const cleanup = loadRecords();
+    return cleanup;
+  }, [loadRecords]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      const cleanup = loadRecords();
+      return cleanup;
+    }, [loadRecords])
+  );
 
   const availableFilterOptions = FILTER_OPTIONS;
   const visibleRecords = records;
@@ -215,77 +219,83 @@ export default function ModerationRecordsScreen({ route, epsus }) {
     });
   }, [activeFilter, dateRange, detailsQuery, moderatorQuery, targetQuery, visibleRecords]);
 
+  const headerContent = (
+    <>
+      <Text style={styles.sectionEyebrow}>Moderation records</Text>
+      <Text style={styles.sectionTitle}>{epsu?.name ?? 'Epsu'}</Text>
+      <View style={styles.filterWrap}>
+        {availableFilterOptions.map((option) => {
+          const isActive = option.key === activeFilter;
+          return (
+            <TouchableOpacity
+              key={option.key}
+              style={[styles.filterChip, isActive && styles.filterChipActive]}
+              onPress={() => setActiveFilter(option.key)}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
+                {option.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+      <View style={styles.searchBlock}>
+        <TextInput
+          style={styles.filterInput}
+          placeholder="Filter by moderator"
+          placeholderTextColor="#8d6676"
+          value={moderatorQuery}
+          onChangeText={setModeratorQuery}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        <TextInput
+          style={styles.filterInput}
+          placeholder="Filter by affected user"
+          placeholderTextColor="#8d6676"
+          value={targetQuery}
+          onChangeText={setTargetQuery}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        <TextInput
+          style={styles.filterInput}
+          placeholder="Filter by reason or details"
+          placeholderTextColor="#8d6676"
+          value={detailsQuery}
+          onChangeText={setDetailsQuery}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </View>
+      <View style={styles.filterWrap}>
+        {DATE_RANGE_OPTIONS.map((option) => {
+          const isActive = option.key === dateRange;
+          return (
+            <TouchableOpacity
+              key={option.key}
+              style={[styles.filterChip, isActive && styles.filterChipActive]}
+              onPress={() => setDateRange(option.key)}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
+                {option.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </>
+  );
+
   return (
     <View style={styles.screen}>
       <View style={[styles.content, { paddingTop: insets.top + 12 }]}>
-        <Text style={styles.sectionEyebrow}>Moderation records</Text>
-        <Text style={styles.sectionTitle}>{epsu?.name ?? 'Epsu'}</Text>
-        <View style={styles.filterWrap}>
-          {availableFilterOptions.map((option) => {
-            const isActive = option.key === activeFilter;
-            return (
-              <TouchableOpacity
-                key={option.key}
-                style={[styles.filterChip, isActive && styles.filterChipActive]}
-                onPress={() => setActiveFilter(option.key)}
-                activeOpacity={0.85}
-              >
-                <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
-                  {option.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-        <View style={styles.searchBlock}>
-          <TextInput
-            style={styles.filterInput}
-            placeholder="Filter by moderator"
-            placeholderTextColor="#8d6676"
-            value={moderatorQuery}
-            onChangeText={setModeratorQuery}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-          <TextInput
-            style={styles.filterInput}
-            placeholder="Filter by affected user"
-            placeholderTextColor="#8d6676"
-            value={targetQuery}
-            onChangeText={setTargetQuery}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-          <TextInput
-            style={styles.filterInput}
-            placeholder="Filter by reason or details"
-            placeholderTextColor="#8d6676"
-            value={detailsQuery}
-            onChangeText={setDetailsQuery}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-        </View>
-        <View style={styles.filterWrap}>
-          {DATE_RANGE_OPTIONS.map((option) => {
-            const isActive = option.key === dateRange;
-            return (
-              <TouchableOpacity
-                key={option.key}
-                style={[styles.filterChip, isActive && styles.filterChipActive]}
-                onPress={() => setDateRange(option.key)}
-                activeOpacity={0.85}
-              >
-                <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
-                  {option.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
         <FlatList
           data={filteredRecords}
           keyExtractor={(item) => item.id}
+          ListHeaderComponent={headerContent}
           contentContainerStyle={filteredRecords.length === 0 ? styles.emptyContent : styles.list}
           renderItem={({ item }) => <RecordCard item={item} />}
           ListEmptyComponent={
@@ -307,107 +317,109 @@ export default function ModerationRecordsScreen({ route, epsus }) {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#fff8fb',
+    backgroundColor: UI.colors.background,
   },
   content: {
     flex: 1,
-    paddingHorizontal: 18,
+    paddingHorizontal: UI.spacing.screen,
   },
   sectionEyebrow: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#8d6676',
+    color: UI.colors.textSoft,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
-    marginBottom: 8,
+    marginBottom: UI.header.eyebrowGap,
   },
   sectionTitle: {
-    fontSize: 24,
+    fontSize: UI.header.titleSize,
     fontWeight: '900',
-    color: '#20131a',
-    marginBottom: 14,
+    color: UI.colors.text,
+    marginBottom: UI.header.sectionGap,
   },
   filterWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginBottom: 14,
+    marginBottom: 16,
   },
   filterChip: {
+    minHeight: 40,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#f3d0dd',
-    backgroundColor: '#fff',
+    borderColor: UI.colors.border,
+    backgroundColor: UI.colors.surface,
     paddingHorizontal: 12,
-    paddingVertical: 9,
+    justifyContent: 'center',
     maxWidth: '100%',
   },
   filterChipActive: {
-    backgroundColor: '#e52b50',
-    borderColor: '#e52b50',
+    backgroundColor: UI.colors.primary,
+    borderColor: UI.colors.primary,
   },
   filterChipText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '800',
-    color: '#7f6170',
+    color: UI.colors.textMuted,
     flexShrink: 1,
   },
   filterChipTextActive: {
-    color: '#fff',
+    color: UI.colors.surface,
   },
   searchBlock: {
     gap: 10,
     marginBottom: 14,
   },
   filterInput: {
-    minHeight: 48,
-    borderRadius: 16,
-    backgroundColor: '#fff',
+    minHeight: 56,
+    borderRadius: UI.radius.row,
+    backgroundColor: UI.colors.surface,
     borderWidth: 1,
-    borderColor: '#f3d0dd',
+    borderColor: UI.colors.border,
     paddingHorizontal: 14,
-    fontSize: 14,
-    color: '#24171d',
+    fontSize: 15,
+    color: UI.colors.text,
   },
   list: {
-    gap: 10,
+    gap: UI.spacing.gap,
     paddingBottom: 18,
   },
   emptyContent: {
     flexGrow: 1,
-    justifyContent: 'center',
+    paddingBottom: 18,
   },
   emptyState: {
     alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: UI.empty.horizontalPadding,
   },
   emptyTitle: {
-    fontSize: 24,
+    fontSize: UI.empty.titleSize,
     fontWeight: '900',
-    color: '#20131a',
-    marginBottom: 8,
+    color: UI.colors.text,
+    marginBottom: UI.empty.iconGap,
   },
   emptyText: {
-    fontSize: 15,
-    color: '#7a5968',
+    fontSize: UI.empty.textSize,
+    color: UI.colors.textMuted,
     textAlign: 'center',
   },
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 18,
+    backgroundColor: UI.colors.surface,
+    borderRadius: UI.radius.card,
     borderWidth: 1,
-    borderColor: '#f3d0dd',
-    padding: 16,
+    borderColor: UI.colors.border,
+    padding: UI.spacing.card,
+    minHeight: UI.browseCard.minHeight,
   },
   cardTitle: {
-    fontSize: 18,
+    fontSize: UI.browseCard.titleSize,
     fontWeight: '900',
-    color: '#20131a',
+    color: UI.colors.text,
     marginBottom: 6,
   },
   cardMeta: {
     fontSize: 13,
-    color: '#7f6170',
+    color: UI.colors.textMuted,
     marginBottom: 4,
   },
   detailsWrap: {
@@ -416,7 +428,7 @@ const styles = StyleSheet.create({
   detailsTitle: {
     fontSize: 12,
     fontWeight: '800',
-    color: '#8d6676',
+    color: UI.colors.textSoft,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
     marginBottom: 6,
@@ -424,12 +436,12 @@ const styles = StyleSheet.create({
   detailLine: {
     fontSize: 13,
     lineHeight: 19,
-    color: '#7f6170',
+    color: UI.colors.textMuted,
     marginBottom: 4,
   },
   cardTime: {
     marginTop: 6,
     fontSize: 13,
-    color: '#8a5e70',
+    color: UI.colors.textSoft,
   },
 });

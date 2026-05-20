@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from 'react-native-gesture-handler';
 import QRCode from 'react-native-qrcode-svg';
@@ -13,45 +14,106 @@ function InviteCard({ title, body }) {
   );
 }
 
-export default function OwnerModInviteScreen({ route, epsus, onEnsureInvite }) {
+export default function OwnerModInviteScreen({ route, epsus, onEnsureInvite, onFetchInviteStatus }) {
   const insets = useSafeAreaInsets();
   const epsuId = route?.params?.epsuId ?? null;
   const epsu = epsus.find((item) => item.id === epsuId) ?? null;
   void epsu;
   const [qrValue, setQrValue] = useState('');
   const [statusText, setStatusText] = useState('Generating QR');
+  const [inviteStatusLabel, setInviteStatusLabel] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const isLoadingRef = useRef(false);
 
-  const loadInvite = useCallback(async () => {
+  const applyInviteStatus = useCallback((result) => {
+    if (!result?.token) {
+      setQrValue('');
+      setInviteStatusLabel('');
+      setStatusText(result?.message ?? 'Could not load QR');
+      return false;
+    }
+
+    const isValid = Boolean(result.is_active) && Number(result.use_count ?? 0) < Number(result.max_uses ?? 1);
+    setQrValue(`https://epsu.site/mod.html?token=${encodeURIComponent(result.token)}`);
+    setInviteStatusLabel(isValid ? 'Valid' : 'Expired');
+    setStatusText(isValid ? 'This QR can still be used' : 'This QR was already used');
+    return isValid;
+  }, []);
+
+  const refreshInviteStatus = useCallback(async () => {
     if (!epsuId || isLoadingRef.current) {
       return;
     }
 
     isLoadingRef.current = true;
     setIsLoading(true);
-    setStatusText('Generating QR');
-    const result = await onEnsureInvite(epsuId, 'moderator');
+    const result = await onFetchInviteStatus(epsuId, 'moderator');
+    isLoadingRef.current = false;
+    setIsLoading(false);
+
+    if (!result?.ok) {
+      setQrValue('');
+      setInviteStatusLabel('');
+      setStatusText(result?.message ?? 'Could not load QR');
+      return;
+    }
+
+    if (!result?.token) {
+      const created = await onEnsureInvite(epsuId, 'moderator', { forceNew: false });
+      if (!created?.ok || !created?.token) {
+        setQrValue('');
+        setInviteStatusLabel('');
+        setStatusText(created?.message ?? 'Could not generate QR');
+        return;
+      }
+
+      applyInviteStatus(created);
+      return;
+    }
+
+    applyInviteStatus(result);
+  }, [applyInviteStatus, epsuId, onEnsureInvite, onFetchInviteStatus]);
+
+  const loadInvite = useCallback(async (forceNew = false) => {
+    if (!epsuId || isLoadingRef.current) {
+      return;
+    }
+
+    isLoadingRef.current = true;
+    setIsLoading(true);
+    setStatusText(forceNew ? 'Generating QR' : 'Loading QR');
+    const result = await onEnsureInvite(epsuId, 'moderator', { forceNew });
     isLoadingRef.current = false;
     setIsLoading(false);
 
     if (!result?.ok || !result?.token) {
       setQrValue('');
+      setInviteStatusLabel('');
       setStatusText(result?.message ?? 'Could not generate QR');
       return;
     }
 
-    setQrValue(`epsu://mod-invite/${result.token}`);
-    setStatusText('');
-  }, [epsuId, onEnsureInvite]);
+    applyInviteStatus(result);
+  }, [applyInviteStatus, epsuId, onEnsureInvite]);
 
   useEffect(() => {
     if (!epsuId) {
       return;
     }
 
-    void loadInvite();
-  }, [epsuId, loadInvite]);
+    void refreshInviteStatus();
+  }, [epsuId, refreshInviteStatus]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!epsuId) {
+        return () => {};
+      }
+
+      void refreshInviteStatus();
+      return () => {};
+    }, [epsuId, refreshInviteStatus])
+  );
 
   return (
     <View style={styles.screen}>
@@ -67,10 +129,13 @@ export default function OwnerModInviteScreen({ route, epsus, onEnsureInvite }) {
           ) : (
             <InviteCard title="Moderator QR" body={statusText} />
           )}
+          <InviteCard title="QR status" body={inviteStatusLabel ? `${inviteStatusLabel}. ${statusText}` : statusText} />
           <InviteCard title="QR entry" body="Scan this QR in the Epsu app to add a moderator" />
           <TouchableOpacity
             style={[styles.actionButton, isLoading && styles.actionButtonDisabled]}
-            onPress={loadInvite}
+            onPress={() => {
+              void loadInvite(true);
+            }}
             activeOpacity={0.85}
             disabled={isLoading}
           >

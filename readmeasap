@@ -1,0 +1,20 @@
+ASAP NOTE
+
+Regional trial Epsu logic currently needs special attention.
+
+What I found:
+- The app UI text says a trial Epsu must get 14 members in 7 days.
+- The regional backend approval logic currently sets `trial_member_goal = 14`.
+- This appears in `supabase/migrations/20260503170000_make_regional_pending_epsus_concrete.sql`.
+
+What this means right now:
+- For current manual testing, using 14 members is the current target.
+- This is understandable for early testing because creating 100 accounts just to confirm the flow is not realistic.
+
+What must happen later:
+- We must return to this and test the real regional trial behavior at the full 100-member requirement, not 2.
+- Final validation should confirm that trial conversion, limits, counts, and follow-up behavior all work correctly at 14 members.
+
+Conclusion:
+- Short-term testing can continue with 2 members.
+- Long-term / real release validation must use the full 100-member regional requirement.

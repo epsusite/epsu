@@ -269,7 +269,6 @@ The real user-visible menu structure is:
   - Terms
   - Guidelines
   - Privacy
-  - Whitepaper
   - Log out
 - Delete account
 - Random food easter egg
@@ -930,7 +929,6 @@ Pages present:
 - `/terms`
 - `/guidelines`
 - `/privacy`
-- `/whitepaper`
 - `/join.html`
 - `/mod.html`
 
@@ -946,7 +944,6 @@ Pages present:
   - Terms of service
   - Community guidelines
   - Data use and privacy
-  - Epsu whitepaper
 
 There is no nav bar, no footer, no login, no app download CTA, no dashboard, and no dynamic content. The site is document-centric.
 

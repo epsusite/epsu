@@ -12,23 +12,106 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import { useIsFocused } from '@react-navigation/native';
 import { PanGestureHandler, State } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { showAppDialog } from './components/AppDialog';
+import { fetchTrialEpsuCreatorState } from './lib/api/epsus';
 import { getSchoolLogoUrl } from './lib/schoolLogo';
+import { UI } from './lib/uiTheme';
 
 const FEED_INTRO_SEEN_PREFIX = 'epsu_feed_intro_seen_v1:';
+const GUEST_FEED_INTRO_SEEN_PREFIX = 'epsu_guest_feed_intro_seen_v1:';
 const ANGRY_CAT_IMAGE = require('./assets/images/whyareyoureadingfiles.jpg');
+const RENT_CARD = {
+  id: 'rent-epsu',
+  code: '???',
+  name: 'Create school Epsu',
+  meta: 'Request a trial Epsu now',
+};
+const SUGGEST_CARD = {
+  id: 'suggest-epsu',
+  code: '???',
+  name: 'Create regional Epsu',
+  meta: 'Request a trial Epsu now',
+};
+const REGIONAL_SCOPES = ['city', 'state', 'country'];
 
-function EpsuCard({ item, onPress, unratedCount, onRentPress, disabled = false }) {
+function CategoryHouseIcon({ color }) {
+  return (
+    <View style={styles.categoryIconBox}>
+      <View
+        style={[
+          styles.houseRoof,
+          {
+            borderBottomColor: color,
+          },
+        ]}
+      />
+      <View style={[styles.houseBody, { borderColor: color }]}>
+        <View style={[styles.houseDoor, { backgroundColor: color }]} />
+      </View>
+    </View>
+  );
+}
+
+function CategoryCapIcon({ color }) {
+  return (
+    <View style={styles.categoryIconBox}>
+      <View
+        style={[
+          styles.capTop,
+          {
+            borderBottomColor: color,
+          },
+        ]}
+      />
+      <View style={[styles.capBand, { backgroundColor: color }]} />
+      <View style={[styles.capTasselStem, { backgroundColor: color }]} />
+      <View style={[styles.capTasselTip, { backgroundColor: color }]} />
+    </View>
+  );
+}
+
+function mergePostsChronologically(currentPosts, incomingPosts) {
+  const postMap = new Map();
+
+  [...currentPosts, ...incomingPosts].forEach((post) => {
+    if (!post?.id) {
+      return;
+    }
+
+    postMap.set(post.id, post);
+  });
+
+  return Array.from(postMap.values()).sort((left, right) => {
+    const releaseTimeDiff = new Date(left.releaseAt ?? 0).getTime() - new Date(right.releaseAt ?? 0).getTime();
+    if (releaseTimeDiff !== 0) {
+      return releaseTimeDiff;
+    }
+
+    return left.number - right.number;
+  });
+}
+
+function getSeededFeedPosts({ cachedFeed, epsuId, posts }) {
+  if (cachedFeed?.posts?.length) {
+    return cachedFeed.posts;
+  }
+
+  return posts.filter((post) => post?.epsuId === epsuId);
+}
+
+function EpsuCard({ item, onPress, unratedCount, onRentPress, disabled = false, visuallyDisabled = false }) {
   const unreadLabel = unratedCount > 99 ? 'NEW POSTS 99+' : `NEW POSTS ${unratedCount}`;
   const isRentCard = item.id === 'rent-epsu';
   const isSuggestCard = item.id === 'suggest-epsu';
   const logoUrl = item.logo_path ? getSchoolLogoUrl(item.logo_path) : null;
+  const isTrial = item.is_trial === true;
 
   return (
     <TouchableOpacity
-      style={[styles.epsuCard, disabled && styles.epsuCardDisabled]}
+      style={[styles.epsuCard, isTrial && styles.epsuCardTrial, visuallyDisabled && styles.epsuCardDisabled]}
       onPress={() => {
         if (isRentCard || isSuggestCard) {
           onRentPress(item.id);
@@ -44,14 +127,14 @@ function EpsuCard({ item, onPress, unratedCount, onRentPress, disabled = false }
         {logoUrl ? (
           <Image source={{ uri: logoUrl }} style={styles.epsuBadgeImage} contentFit="cover" />
         ) : (
-          <Text style={styles.epsuBadgeText}>{item.code}</Text>
+          <View style={styles.epsuBadgePlaceholder} />
         )}
       </View>
       <View style={styles.epsuCopy}>
         <Text style={styles.epsuName}>{item.name}</Text>
         <Text style={styles.epsuMeta}>{item.meta ?? 'Joined Epsu'}</Text>
       </View>
-      {!isRentCard && !isSuggestCard && unratedCount > 0 ? (
+      {!isRentCard && !isSuggestCard && !isTrial && unratedCount > 0 ? (
         <View style={styles.newPostsBadge}>
           <Text style={styles.newPostsText}>{unreadLabel}</Text>
         </View>
@@ -133,12 +216,23 @@ function PostCardSurface({ post, opacity, translateX, swipeRotation, likeOverlay
   );
 }
 
-function ModerationPostCard({ post, replyTargetPost, onReact, onReply, onReport, onBlockAuthor, hasReported, showSwipeHint, onIntroDismiss }) {
+function ModerationPostCard({
+  post,
+  replyTargetPost,
+  onReact,
+  onReply,
+  onReport,
+  onBlockAuthor,
+  hasReported,
+  hasReplied,
+  showSwipeHint,
+  onIntroDismiss,
+}) {
   const translateX = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(1)).current;
   const isAnimatingRef = useRef(false);
   const [cardWidth, setCardWidth] = useState(1);
-  const [isLocked, setIsLocked] = useState(false);
+  const [, setIsLocked] = useState(false);
   const [dismissedPostId, setDismissedPostId] = useState(null);
   const hasReplyContext = Boolean(post.replyToPostId && replyTargetPost?.id === post.replyToPostId);
   const isIntroCard = Boolean(post.isIntroCard);
@@ -301,11 +395,12 @@ function ModerationPostCard({ post, replyTargetPost, onReact, onReply, onReport,
               <Text style={styles.actionButtonText}>{hasReported ? 'Already reported' : 'Report'}</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={styles.actionButton}
+              style={[styles.actionButton, hasReplied && styles.actionButtonDisabled]}
               onPress={() => onReply(post)}
               activeOpacity={0.85}
+              disabled={hasReplied}
             >
-              <Text style={styles.actionButtonText}>Reply</Text>
+              <Text style={styles.actionButtonText}>{hasReplied ? 'Already replied' : 'Reply'}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionButton, !post.authorId && styles.actionButtonDisabled]}
@@ -329,8 +424,10 @@ export default function HomeScreen({
   posts,
   memberships,
   epsuPopulationById,
+  activePostCountByEpsu = {},
   reviewedPostIdsByEpsu,
   reportedPostIds,
+  repliedToPostIds = [],
   onReactToPost,
   onReportPost,
   onBlockPostAuthor,
@@ -339,28 +436,38 @@ export default function HomeScreen({
   userMemberships,
   hiddenEpsuIds,
   blockedAuthorIds = [],
-  onLeaveSchoolEpsu,
-  onJoinRegionalEpsu,
+  onLeaveEpsu,
+  onJoinEpsu,
+  onFetchEpsuFeedPage,
+  onFetchPostById,
   currentCountryCode,
   currentIsAdmin = false,
+  isGuestMode = false,
+  onGuestLockedAction,
 }) {
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
   const [epsuCategory, setEpsuCategory] = useState('regional');
   const [currentTime, setCurrentTime] = useState(() => Date.now());
   const [feedIntroStage, setFeedIntroStage] = useState(null);
-  const rentCard = {
-    id: 'rent-epsu',
-    code: '???',
-    name: 'Suggest school Epsu',
-    meta: 'Request a new school Epsu',
-  };
-  const suggestCard = {
-    id: 'suggest-epsu',
-    code: '???',
-    name: 'Suggest regional Epsu',
-    meta: 'Request a new regional Epsu',
-  };
+  const [selectedFeedPosts, setSelectedFeedPosts] = useState([]);
+  const [selectedFeedOffset, setSelectedFeedOffset] = useState(0);
+  const [selectedFeedHasMore, setSelectedFeedHasMore] = useState(true);
+  const [isSelectedFeedLoading, setIsSelectedFeedLoading] = useState(false);
+  const [hasLoadedSelectedFeed, setHasLoadedSelectedFeed] = useState(false);
+  const [selectedFeedPageCache, setSelectedFeedPageCache] = useState({});
+  const [selectedFeedPostCache, setSelectedFeedPostCache] = useState({});
+  const replyContextLookupStatusRef = useRef({});
+  const selectedFeedPageCacheRef = useRef({});
+  const [trialCreatorState, setTrialCreatorState] = useState({
+    isLocked: false,
+    hasPendingSubmission: false,
+    cooldownUntil: null,
+  });
+  const isFocused = useIsFocused();
+  const feedIntroSeenKeyPrefix = isGuestMode ? GUEST_FEED_INTRO_SEEN_PREFIX : FEED_INTRO_SEEN_PREFIX;
+  const rentCard = RENT_CARD;
+  const suggestCard = SUGGEST_CARD;
   const selectedEpsuId = route?.params?.epsuId ?? null;
   const selectedEpsu = epsus.find((epsu) => epsu.id === selectedEpsuId) ?? null;
   const membershipByEpsuId = useMemo(
@@ -373,15 +480,23 @@ export default function HomeScreen({
   );
   void memberships;
   const selectedMembership = selectedEpsu ? membershipByEpsuId[selectedEpsu.id] ?? null : null;
+  const isSelectedFeedInitialLoading = isSelectedFeedLoading && !hasLoadedSelectedFeed;
+  const isSelectedFeedRefreshing = isSelectedFeedLoading && hasLoadedSelectedFeed;
   const canModerate = selectedEpsu
     ? currentIsAdmin || moderatedEpsuIds.includes(selectedEpsu.id)
     : false;
   const isHost = selectedEpsu
     ? currentIsAdmin || hostedEpsuIds.includes(selectedEpsu.id)
     : false;
-  const filteredPosts = selectedEpsu
-    ? posts.filter((post) => post.epsuId === selectedEpsu.id && !blockedAuthorIds.includes(post.authorId))
-    : [];
+  const filteredPosts = useMemo(() => {
+    const selectedSourcePosts = selectedEpsu
+      ? selectedFeedPosts
+      : posts;
+
+    return selectedEpsu
+      ? selectedSourcePosts.filter((post) => post.epsuId === selectedEpsu.id && !blockedAuthorIds.includes(post.authorId))
+      : [];
+  }, [blockedAuthorIds, posts, selectedEpsu, selectedFeedPosts]);
   const nextBatchCountdown = useMemo(() => {
     const now = new Date(currentTime);
     const nextHour = new Date(now);
@@ -405,6 +520,33 @@ export default function HomeScreen({
     };
   }, []);
   useEffect(() => {
+    if (isGuestMode || selectedEpsu || !isFocused) {
+      return undefined;
+    }
+
+    let isActive = true;
+
+    fetchTrialEpsuCreatorState()
+      .then((state) => {
+        if (isActive) {
+          setTrialCreatorState(state);
+        }
+      })
+      .catch(() => {
+        if (isActive) {
+          setTrialCreatorState({
+            isLocked: false,
+            hasPendingSubmission: false,
+            cooldownUntil: null,
+          });
+        }
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [isFocused, isGuestMode, selectedEpsu]);
+  useEffect(() => {
     let isActive = true;
 
     const loadFeedIntroState = async () => {
@@ -416,7 +558,7 @@ export default function HomeScreen({
       }
 
       try {
-        const storedValue = await AsyncStorage.getItem(`${FEED_INTRO_SEEN_PREFIX}${selectedEpsu.id}`);
+        const storedValue = await AsyncStorage.getItem(`${feedIntroSeenKeyPrefix}${selectedEpsu.id}`);
         if (isActive) {
           setFeedIntroStage(storedValue === 'true' ? null : 'welcome');
         }
@@ -432,24 +574,159 @@ export default function HomeScreen({
     return () => {
       isActive = false;
     };
+  }, [feedIntroSeenKeyPrefix, selectedEpsu?.id]);
+  useEffect(() => {
+    selectedFeedPageCacheRef.current = selectedFeedPageCache;
+  }, [selectedFeedPageCache]);
+  useEffect(() => {
+    replyContextLookupStatusRef.current = {};
   }, [selectedEpsu?.id]);
-  const unratedCountByEpsu = useMemo(
-    () =>
-      epsus.reduce((accumulator, epsu) => {
-        const reviewedIds = new Set(reviewedPostIdsByEpsu[epsu.id] ?? []);
-        const unratedCount = posts.reduce((count, post) => {
-          if (post.epsuId !== epsu.id) {
-            return count;
+  useEffect(() => {
+    if (!selectedEpsu?.id) {
+      setSelectedFeedPosts([]);
+      setSelectedFeedOffset(0);
+      setSelectedFeedHasMore(true);
+      setIsSelectedFeedLoading(false);
+      setHasLoadedSelectedFeed(false);
+      return;
+    }
+
+    let isActive = true;
+    const cachedFeed = selectedFeedPageCacheRef.current[selectedEpsu.id] ?? null;
+    const seededFeedPosts = getSeededFeedPosts({
+      cachedFeed,
+      epsuId: selectedEpsu.id,
+      posts,
+    });
+    const hasSeededFeedPosts = seededFeedPosts.length > 0;
+
+    const loadInitialSelectedFeed = async () => {
+      if (cachedFeed || hasSeededFeedPosts) {
+        setSelectedFeedPosts(seededFeedPosts);
+        setSelectedFeedOffset(cachedFeed.offset ?? 0);
+        setSelectedFeedHasMore(cachedFeed ? Boolean(cachedFeed.hasMore) : true);
+        setHasLoadedSelectedFeed(true);
+      } else {
+        setSelectedFeedPosts([]);
+        setSelectedFeedOffset(0);
+        setSelectedFeedHasMore(true);
+        setHasLoadedSelectedFeed(false);
+      }
+
+      setIsSelectedFeedLoading(true);
+
+      const result = await onFetchEpsuFeedPage(selectedEpsu.id, { offset: 0 });
+
+      if (!isActive) {
+        return;
+      }
+
+      if (result?.ok) {
+        setSelectedFeedPosts((current) =>
+          cachedFeed || hasSeededFeedPosts
+            ? mergePostsChronologically(current, result.posts ?? [])
+            : (result.posts ?? [])
+        );
+        setSelectedFeedOffset(
+          cachedFeed
+            ? Math.max(cachedFeed.offset ?? 0, result.nextOffset ?? (result.posts?.length ?? 0))
+            : (result.nextOffset ?? (result.posts?.length ?? 0))
+        );
+        setSelectedFeedHasMore(Boolean(result.hasMore));
+      } else {
+        if (!cachedFeed && !hasSeededFeedPosts) {
+          setSelectedFeedPosts([]);
+          setSelectedFeedOffset(0);
+          setSelectedFeedHasMore(false);
+        }
+      }
+
+      setIsSelectedFeedLoading(false);
+      setHasLoadedSelectedFeed(true);
+    };
+
+    void loadInitialSelectedFeed();
+
+    return () => {
+      isActive = false;
+    };
+  }, [onFetchEpsuFeedPage, posts, selectedEpsu?.id]);
+  useEffect(() => {
+    if (!selectedEpsu?.id || !hasLoadedSelectedFeed) {
+      return;
+    }
+
+    setSelectedFeedPageCache((current) => ({
+      ...current,
+      [selectedEpsu.id]: {
+        posts: selectedFeedPosts,
+        offset: selectedFeedOffset,
+        hasMore: selectedFeedHasMore,
+      },
+    }));
+  }, [hasLoadedSelectedFeed, selectedEpsu?.id, selectedFeedHasMore, selectedFeedOffset, selectedFeedPosts]);
+  useEffect(() => {
+    if (!selectedEpsu?.id) {
+      return;
+    }
+
+    setSelectedFeedPostCache((current) => {
+      const next = { ...current };
+      let hasChanges = false;
+
+      [...selectedFeedPosts, ...posts]
+        .filter((post) => post?.epsuId === selectedEpsu.id)
+        .forEach((post) => {
+          if (!post?.id) {
+            return;
           }
 
-          return reviewedIds.has(post.id) ? count : count + 1;
-        }, 0);
+          if (next[post.id] !== post) {
+            next[post.id] = post;
+            hasChanges = true;
+          }
+        });
 
-        accumulator[epsu.id] = unratedCount;
+      return hasChanges ? next : current;
+    });
+  }, [posts, selectedEpsu?.id, selectedFeedPosts]);
+  useEffect(() => {
+    if (!selectedEpsu?.id || posts.length === 0) {
+      return;
+    }
+
+    setSelectedFeedPosts((current) => {
+      const existingIds = new Set(current.map((post) => post.id));
+      const incomingPosts = posts.filter((post) => post.epsuId === selectedEpsu.id && !existingIds.has(post.id));
+
+      if (incomingPosts.length === 0) {
+        return current;
+      }
+
+      return mergePostsChronologically(current, incomingPosts);
+    });
+  }, [posts, selectedEpsu?.id]);
+  const unratedCountByEpsu = useMemo(() => {
+    const visibleActivePostsByEpsu = posts.reduce((accumulator, post) => {
+      if (!post?.epsuId || blockedAuthorIds.includes(post.authorId)) {
         return accumulator;
-      }, {}),
-    [epsus, posts, reviewedPostIdsByEpsu]
-  );
+      }
+
+      const existing = accumulator[post.epsuId] ?? [];
+      existing.push(post);
+      accumulator[post.epsuId] = existing;
+      return accumulator;
+    }, {});
+
+    return epsus.reduce((accumulator, epsu) => {
+      const reviewedIds = new Set(reviewedPostIdsByEpsu[epsu.id] ?? []);
+      const visibleActivePosts = visibleActivePostsByEpsu[epsu.id] ?? [];
+      const unratedCount = visibleActivePosts.filter((post) => !reviewedIds.has(post.id)).length;
+
+      accumulator[epsu.id] = unratedCount;
+      return accumulator;
+    }, {});
+  }, [blockedAuthorIds, epsus, posts, reviewedPostIdsByEpsu]);
   const totalReviewedCount = useMemo(
     () =>
       Object.values(reviewedPostIdsByEpsu).reduce(
@@ -467,9 +744,11 @@ export default function HomeScreen({
         const rightMembership = membershipByEpsuId[right.id];
         const leftIsJoined = currentIsAdmin || ['active', 'muted'].includes(leftMembership?.status);
         const rightIsJoined = currentIsAdmin || ['active', 'muted'].includes(rightMembership?.status);
+        const leftGroup = leftIsJoined ? 0 : left.is_trial ? 1 : 2;
+        const rightGroup = rightIsJoined ? 0 : right.is_trial ? 1 : 2;
 
-        if (leftIsJoined !== rightIsJoined) {
-          return leftIsJoined ? -1 : 1;
+        if (leftGroup !== rightGroup) {
+          return leftGroup - rightGroup;
         }
 
         const leftMemberCount = epsuPopulationById[left.id]?.memberCount ?? 0;
@@ -497,8 +776,7 @@ export default function HomeScreen({
           !epsu.country_code ||
           (currentCountryCode && epsu.country_code === currentCountryCode);
         return (
-          epsu.scope !== 'school' &&
-          epsu.scope !== 'private' &&
+          REGIONAL_SCOPES.includes(epsu.scope) &&
           epsu.review_status === 'approved' &&
           isCurrentCountryRegional &&
           (currentIsAdmin || !membership || ['active', 'muted', 'invited'].includes(membership?.status))
@@ -513,7 +791,7 @@ export default function HomeScreen({
       primaryCard,
       ...categoryEpsus.filter((epsu) => epsu.name.toLowerCase().includes(normalizedQuery)),
     ];
-  }, [currentCountryCode, currentIsAdmin, epsuCategory, epsuPopulationById, epsus, hiddenEpsuIds, membershipByEpsuId, searchQuery]);
+  }, [currentCountryCode, currentIsAdmin, epsuCategory, epsuPopulationById, epsus, hiddenEpsuIds, membershipByEpsuId, rentCard, searchQuery, suggestCard]);
 
   const getEpsuMeta = (epsu) => {
     const membership = membershipByEpsuId[epsu.id];
@@ -521,6 +799,16 @@ export default function HomeScreen({
     const memberCount = summary.memberCount;
     const memberLabel = `${memberCount} members`;
     const populationLabel = `${memberLabel}, ${summary.onlineCount} online now`;
+    const trialGoal = epsu.trial_member_goal ?? 14;
+    const trialLabel = `${memberCount}/${trialGoal} members to become permanent`;
+
+    if (epsu.is_trial) {
+      return trialLabel;
+    }
+
+    if (isGuestMode) {
+      return populationLabel;
+    }
 
     if (hostedEpsuIds.includes(epsu.id)) {
       return populationLabel;
@@ -538,7 +826,7 @@ export default function HomeScreen({
       return `Tap to join, ${populationLabel}`;
     }
 
-    if (epsu.scope !== 'school' && !membership) {
+    if (REGIONAL_SCOPES.includes(epsu.scope) && !membership) {
       return `Tap to join, ${populationLabel}`;
     }
 
@@ -555,32 +843,17 @@ export default function HomeScreen({
       return;
     }
 
-    if (epsu.scope === 'school') {
-      if (epsu.review_status !== 'approved') {
-        return;
-      }
+    if (isGuestMode) {
+      navigation.navigate('HomeEpsu', { epsuId });
+      return;
+    }
 
-      if (isHostedEpsu || isModeratedEpsu) {
-        navigation.navigate('HomeEpsu', { epsuId });
-        return;
-      }
+    if (epsu.review_status !== 'approved') {
+      return;
+    }
 
-      if (membership?.status === 'active' || membership?.status === 'muted') {
-        navigation.navigate('HomeEpsu', { epsuId });
-        return;
-      }
-
-      if (membership?.status === 'invited') {
-        return;
-      }
-
-      const result = await onJoinRegionalEpsu(epsuId);
-      if (result?.ok) {
-        navigation.navigate('HomeEpsu', { epsuId });
-        return;
-      }
-
-      showAppDialog('School Epsu', result?.message ?? 'Could not join this school Epsu');
+    if (isHostedEpsu || isModeratedEpsu || ['active', 'muted'].includes(membership?.status)) {
+      navigation.navigate('HomeEpsu', { epsuId });
       return;
     }
 
@@ -588,32 +861,45 @@ export default function HomeScreen({
       return;
     }
 
-    if (!['active', 'muted'].includes(membership?.status)) {
-      const result = await onJoinRegionalEpsu(epsuId);
-      if (result?.ok) {
-        navigation.navigate('HomeEpsu', { epsuId });
-        return;
-      }
-
-      showAppDialog('Regional Epsu', result?.message ?? 'Could not join this regional Epsu');
+    const result = await onJoinEpsu(epsuId);
+    if (result?.ok) {
+      navigation.navigate('HomeEpsu', { epsuId });
       return;
     }
 
-    navigation.navigate('HomeEpsu', { epsuId });
+    showAppDialog('Epsu', result?.message ?? 'Could not join this Epsu');
   };
 
   const handleLeave = async () => {
+    if (isGuestMode) {
+      onGuestLockedAction?.();
+      return;
+    }
+
     if (!selectedEpsu) {
       return;
     }
 
-    const result = await onLeaveSchoolEpsu(selectedEpsu.id);
-    if (result?.ok) {
-      navigation.navigate('HomeMain');
-      return;
-    }
+    showAppDialog(
+      'Leave Epsu',
+      `Leave ${selectedEpsu.name}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Leave',
+          style: 'destructive',
+          onPress: async () => {
+            const result = await onLeaveEpsu(selectedEpsu.id);
+            if (result?.ok) {
+              navigation.navigate('HomeMain');
+              return;
+            }
 
-    showAppDialog('School Epsu', 'Could not leave this Epsu');
+            showAppDialog('Epsu', result?.message ?? 'Could not leave this Epsu');
+          },
+        },
+      ]
+    );
   };
 
   React.useEffect(() => {
@@ -675,8 +961,64 @@ export default function HomeScreen({
   const currentPost = introPost ?? unratedPosts[0] ?? null;
   const replyTargetPost =
     !currentPost?.isIntroCard && currentPost?.replyToPostId && currentPost.replyToPostId !== currentPost.id
-      ? filteredPosts.find((post) => post.id === currentPost.replyToPostId) ?? null
+      ? filteredPosts.find((post) => post.id === currentPost.replyToPostId)
+        ?? selectedFeedPostCache[currentPost.replyToPostId]
+        ?? null
       : null;
+  useEffect(() => {
+    const replyTargetPostId = currentPost?.replyToPostId;
+
+    if (
+      !selectedEpsu?.id ||
+      !replyTargetPostId ||
+      currentPost?.isIntroCard ||
+      replyTargetPostId === currentPost?.id ||
+      replyTargetPost
+    ) {
+      return;
+    }
+
+    const lookupState = replyContextLookupStatusRef.current[replyTargetPostId];
+    if (lookupState === 'pending' || lookupState === 'loaded' || lookupState === 'missing') {
+      return;
+    }
+
+    replyContextLookupStatusRef.current[replyTargetPostId] = 'pending';
+
+    let isActive = true;
+
+    const loadReplyTargetPost = async () => {
+      const result = await onFetchPostById(replyTargetPostId, selectedEpsu.id);
+
+      if (!isActive) {
+        return;
+      }
+
+      if (result?.ok && result.post?.id) {
+        replyContextLookupStatusRef.current[replyTargetPostId] = 'loaded';
+        setSelectedFeedPostCache((current) => ({
+          ...current,
+          [result.post.id]: result.post,
+        }));
+        return;
+      }
+
+      replyContextLookupStatusRef.current[replyTargetPostId] = 'missing';
+    };
+
+    void loadReplyTargetPost();
+
+    return () => {
+      isActive = false;
+    };
+  }, [
+    currentPost?.id,
+    currentPost?.isIntroCard,
+    currentPost?.replyToPostId,
+    onFetchPostById,
+    replyTargetPost,
+    selectedEpsu?.id,
+  ]);
 
   const handleDismissIntroCard = async (side) => {
     if (!selectedEpsu?.id) {
@@ -689,11 +1031,16 @@ export default function HomeScreen({
     }
 
     setFeedIntroStage(null);
-    await AsyncStorage.setItem(`${FEED_INTRO_SEEN_PREFIX}${selectedEpsu.id}`, 'true').catch(() => {});
+    await AsyncStorage.setItem(`${feedIntroSeenKeyPrefix}${selectedEpsu.id}`, 'true').catch(() => {});
     return { ok: true };
   };
 
   const handleReply = (post) => {
+    if (isGuestMode) {
+      onGuestLockedAction?.();
+      return;
+    }
+
     navigation.navigate('Post', {
       replyNonce: Date.now(),
       replyTitle: `Reply to #${post.number}`,
@@ -703,6 +1050,11 @@ export default function HomeScreen({
   };
 
   const handleBlockAuthor = (post) => {
+    if (isGuestMode) {
+      onGuestLockedAction?.();
+      return;
+    }
+
     if (!post?.authorId) {
       return;
     }
@@ -726,6 +1078,47 @@ export default function HomeScreen({
       ]
     );
   };
+  useEffect(() => {
+    if (!selectedEpsu?.id || introPost || currentPost || !hasLoadedSelectedFeed || !selectedFeedHasMore || isSelectedFeedLoading) {
+      return;
+    }
+
+    let isActive = true;
+
+    const loadMoreSelectedFeed = async () => {
+      setIsSelectedFeedLoading(true);
+      const result = await onFetchEpsuFeedPage(selectedEpsu.id, { offset: selectedFeedOffset });
+
+      if (!isActive) {
+        return;
+      }
+
+      if (result?.ok) {
+        setSelectedFeedPosts((current) => mergePostsChronologically(current, result.posts ?? []));
+        setSelectedFeedOffset(result.nextOffset ?? selectedFeedOffset);
+        setSelectedFeedHasMore(Boolean(result.hasMore));
+      } else {
+        setSelectedFeedHasMore(false);
+      }
+
+      setIsSelectedFeedLoading(false);
+    };
+
+    void loadMoreSelectedFeed();
+
+    return () => {
+      isActive = false;
+    };
+  }, [
+    currentPost,
+    hasLoadedSelectedFeed,
+    introPost,
+    isSelectedFeedLoading,
+    onFetchEpsuFeedPage,
+    selectedEpsu?.id,
+    selectedFeedHasMore,
+    selectedFeedOffset,
+  ]);
 
   if (!selectedEpsu) {
     return (
@@ -746,14 +1139,17 @@ export default function HomeScreen({
             onPress={() => setEpsuCategory('regional')}
             activeOpacity={0.85}
           >
-            <Text
-              style={[
-                styles.categoryButtonText,
-                epsuCategory === 'regional' && styles.categoryButtonTextActive,
-              ]}
-            >
-              Regional Epsus
-            </Text>
+            <View style={styles.categoryButtonContent}>
+              <CategoryHouseIcon color={epsuCategory === 'regional' ? '#fff' : UI.colors.primary} />
+              <Text
+                style={[
+                  styles.categoryButtonText,
+                  epsuCategory === 'regional' && styles.categoryButtonTextActive,
+                ]}
+              >
+                Regional Epsus
+              </Text>
+            </View>
           </TouchableOpacity>
           <TouchableOpacity
             style={[
@@ -763,14 +1159,17 @@ export default function HomeScreen({
             onPress={() => setEpsuCategory('school')}
             activeOpacity={0.85}
           >
-            <Text
-              style={[
-                styles.categoryButtonText,
-                epsuCategory === 'school' && styles.categoryButtonTextActive,
-              ]}
-            >
-              School Epsus
-            </Text>
+            <View style={styles.categoryButtonContent}>
+              <CategoryCapIcon color={epsuCategory === 'school' ? '#fff' : UI.colors.primary} />
+              <Text
+                style={[
+                  styles.categoryButtonText,
+                  epsuCategory === 'school' && styles.categoryButtonTextActive,
+                ]}
+              >
+                School Epsus
+              </Text>
+            </View>
           </TouchableOpacity>
         </View>
         <TextInput
@@ -793,13 +1192,30 @@ export default function HomeScreen({
               }}
               onPress={handleEpsuPress}
               onRentPress={(cardId) =>
-                navigation.navigate(cardId === 'rent-epsu' ? 'RentEpsu' : 'JoinInvite')
+                isGuestMode
+                  ? onGuestLockedAction?.()
+                  : !trialCreatorState.isLocked
+                    ? navigation.navigate(cardId === 'rent-epsu' ? 'RentEpsu' : 'JoinInvite')
+                    : showAppDialog(
+                        cardId === 'rent-epsu' ? 'School Epsu already created' : 'Regional Epsu already created',
+                        'You will get a notification after Administration approves or rejects it'
+                      )
               }
               unratedCount={unratedCountByEpsu[item.id] ?? 0}
               disabled={
-                item.id !== 'rent-epsu' &&
-                item.id !== 'suggest-epsu' &&
-                membershipByEpsuId[item.id]?.status === 'invited'
+                (
+                  item.id !== 'rent-epsu' &&
+                  item.id !== 'suggest-epsu' &&
+                  membershipByEpsuId[item.id]?.status === 'invited'
+                )
+              }
+              visuallyDisabled={
+                ((item.id === 'rent-epsu' || item.id === 'suggest-epsu') && trialCreatorState.isLocked) ||
+                (
+                  item.id !== 'rent-epsu' &&
+                  item.id !== 'suggest-epsu' &&
+                  membershipByEpsuId[item.id]?.status === 'invited'
+                )
               }
             />
           )}
@@ -819,15 +1235,18 @@ export default function HomeScreen({
       <View style={styles.feedHeader}>
         <Text style={styles.sectionEyebrow}>Your Epsus</Text>
         <Text style={styles.sectionTitle}>{selectedEpsu.name}</Text>
+        {isSelectedFeedRefreshing ? (
+          <Text style={styles.refreshHint}>Refreshing posts...</Text>
+        ) : null}
       </View>
 
-      {selectedEpsu.scope === 'school' && selectedMembership?.status === 'active' && !isHost ? (
+      {['active', 'muted'].includes(selectedMembership?.status) && !isHost && !isGuestMode && !currentIsAdmin ? (
         <TouchableOpacity style={styles.leaveButton} onPress={handleLeave} activeOpacity={0.85}>
-          <Text style={styles.leaveButtonText}>Leave school Epsu</Text>
+          <Text style={styles.leaveButtonText}>Leave Epsu</Text>
         </TouchableOpacity>
       ) : null}
 
-      {canModerate || isHost ? (
+      {!isGuestMode && (canModerate || isHost) ? (
         <View style={styles.toolRow}>
           {canModerate ? (
             <TouchableOpacity
@@ -857,29 +1276,37 @@ export default function HomeScreen({
         </View>
       ) : null}
 
-      {selectedMembership?.status === 'muted' ? (
-        <View style={styles.mutedCard}>
-          <Text style={styles.mutedTitle}>You have been muted for 24 hours</Text>
-          <Text style={styles.mutedText}>Until then, you can not post or rate here</Text>
-        </View>
-      ) : currentPost ? (
+      {currentPost ? (
         <ModerationPostCard
           key={`${currentPost.id}:${replyTargetPost?.id ?? 'none'}`}
           post={currentPost}
           replyTargetPost={replyTargetPost}
           hasReported={reportedPostIds.includes(currentPost.id)}
+          hasReplied={repliedToPostIds.includes(currentPost.id)}
           showSwipeHint={totalReviewedCount < 5}
           onReact={(reaction, post) => onReactToPost(selectedEpsu.id, post.id, reaction)}
           onBlockAuthor={handleBlockAuthor}
           onIntroDismiss={handleDismissIntroCard}
           onReport={(post) =>
-            navigation.navigate('ReportReason', {
-              postId: post.id,
-              epsuId: selectedEpsu.id,
-            })
+            isGuestMode
+              ? onGuestLockedAction?.()
+              : navigation.navigate('ReportReason', {
+                  postId: post.id,
+                  epsuId: selectedEpsu.id,
+                })
           }
           onReply={handleReply}
         />
+      ) : isSelectedFeedInitialLoading || !hasLoadedSelectedFeed ? (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyTitle}>Loading posts</Text>
+          <Text style={styles.emptyText}>Pulling in this Epsu feed now</Text>
+        </View>
+      ) : selectedMembership?.status === 'muted' ? (
+        <View style={styles.mutedCard}>
+          <Text style={styles.mutedTitle}>You have been muted for 24 hours</Text>
+          <Text style={styles.mutedText}>You can still read, react, and use your role tools. You just can not submit posts here right now</Text>
+        </View>
       ) : (
         <View style={styles.emptyState}>
           <Text style={styles.emptyTitle}>No active posts right now</Text>
@@ -911,10 +1338,10 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   sectionHint: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: '#7a5968',
-    marginBottom: 14,
+    fontSize: UI.header.hintSize,
+    lineHeight: UI.header.hintLineHeight,
+    color: UI.colors.textMuted,
+    marginBottom: UI.header.sectionGap,
   },
   leaveButton: {
     borderRadius: 16,
@@ -941,37 +1368,43 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     minHeight: 56,
-    borderRadius: 16,
-    backgroundColor: '#fff',
+    borderRadius: UI.radius.row,
+    backgroundColor: UI.colors.surface,
     borderWidth: 1,
-    borderColor: '#f3d0dd',
+    borderColor: UI.colors.border,
     paddingHorizontal: 16,
     marginBottom: 14,
     fontSize: 15,
-    color: '#24171d',
+    color: UI.colors.text,
   },
   categoryToggle: {
     flexDirection: 'row',
     gap: 10,
-    marginBottom: 14,
+    marginBottom: 16,
   },
   categoryButton: {
     flex: 1,
     minHeight: 56,
-    borderRadius: 16,
+    borderRadius: UI.radius.row,
     borderWidth: 1,
-    borderColor: '#f3d0dd',
-    backgroundColor: '#fff',
+    borderColor: UI.colors.border,
+    backgroundColor: UI.colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 12,
   },
+  categoryButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
   categoryButtonActive: {
-    backgroundColor: '#e52b50',
-    borderColor: '#e52b50',
+    backgroundColor: UI.colors.primary,
+    borderColor: UI.colors.primary,
   },
   categoryButtonText: {
-    color: '#7f6170',
+    color: UI.colors.textMuted,
     fontSize: 15,
     fontWeight: '800',
     letterSpacing: 0.4,
@@ -979,56 +1412,131 @@ const styles = StyleSheet.create({
   categoryButtonTextActive: {
     color: '#fff',
   },
+  categoryIconBox: {
+    width: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  houseRoof: {
+    position: 'absolute',
+    top: 1,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 8,
+    borderRightWidth: 8,
+    borderBottomWidth: 7,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+  },
+  houseBody: {
+    position: 'absolute',
+    bottom: 1,
+    width: 12,
+    height: 9,
+    borderWidth: 1.8,
+    borderRadius: 2,
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  houseDoor: {
+    width: 3,
+    height: 5,
+    borderTopLeftRadius: 1,
+    borderTopRightRadius: 1,
+  },
+  capTop: {
+    position: 'absolute',
+    top: 2,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 9,
+    borderRightWidth: 9,
+    borderBottomWidth: 5,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+  },
+  capBand: {
+    position: 'absolute',
+    top: 9,
+    width: 12,
+    height: 2.5,
+    borderRadius: 999,
+  },
+  capTasselStem: {
+    position: 'absolute',
+    top: 6,
+    right: 0,
+    width: 1.6,
+    height: 7,
+    borderRadius: 999,
+  },
+  capTasselTip: {
+    position: 'absolute',
+    top: 12,
+    right: -1,
+    width: 4,
+    height: 3,
+    borderRadius: 999,
+  },
   epsuCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 18,
-    padding: 16,
+    minHeight: UI.browseCard.minHeight,
+    backgroundColor: UI.colors.surface,
+    borderRadius: UI.radius.card,
+    padding: UI.spacing.card,
     borderWidth: 1,
-    borderColor: '#f3d0dd',
+    borderColor: UI.colors.border,
+  },
+  epsuCardTrial: {
+    backgroundColor: '#b7fb00',
+    borderColor: '#d7ef8c',
   },
   epsuCardDisabled: {
     opacity: 0.65,
   },
   epsuBadge: {
-    width: 46,
-    height: 46,
-    borderRadius: 24,
-    backgroundColor: '#e52b50',
+    width: UI.browseCard.badgeSize,
+    height: UI.browseCard.badgeSize,
+    borderRadius: UI.browseCard.badgeRadius,
+    backgroundColor: UI.colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 14,
+    marginRight: UI.browseCard.badgeGap,
   },
   epsuBadgeImage: {
-    width: 46,
-    height: 46,
-    borderRadius: 24,
+    width: UI.browseCard.badgeSize,
+    height: UI.browseCard.badgeSize,
+    borderRadius: UI.browseCard.badgeRadius,
   },
-  epsuBadgeText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '900',
+  epsuBadgePlaceholder: {
+    width: 18,
+    height: 18,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
   },
   epsuCopy: {
     flex: 1,
   },
   epsuName: {
-    fontSize: 18,
+    fontSize: UI.browseCard.titleSize,
     fontWeight: '900',
-    color: '#211319',
+    color: UI.colors.text,
     marginBottom: 4,
   },
   epsuMeta: {
-    fontSize: 14,
-    color: '#7f6170',
+    fontSize: UI.browseCard.metaSize,
+    color: UI.colors.textMuted,
+    lineHeight: 20,
   },
   newPostsBadge: {
     marginLeft: 12,
-    backgroundColor: '#e52b50',
+    backgroundColor: UI.colors.primary,
     borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
   },
   newPostsText: {
     color: '#fff',
@@ -1038,6 +1546,11 @@ const styles = StyleSheet.create({
   },
   feedHeader: {
     marginBottom: 12,
+  },
+  refreshHint: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: UI.colors.textSoft,
   },
   toolRow: {
     flexDirection: 'row',
@@ -1061,17 +1574,17 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: UI.empty.horizontalPadding,
   },
   emptyTitle: {
-    fontSize: 24,
+    fontSize: UI.empty.titleSize,
     fontWeight: '900',
-    color: '#20131a',
-    marginBottom: 8,
+    color: UI.colors.text,
+    marginBottom: UI.empty.iconGap,
   },
   emptyText: {
-    fontSize: 15,
-    color: '#7a5968',
+    fontSize: UI.empty.textSize,
+    color: UI.colors.textMuted,
     textAlign: 'center',
   },
   postCard: {

@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Epsu Android Tester Script</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #fff8fb;
+        --card: #ffffff;
+        --text: #20131a;
+        --muted: #7f6170;
+        --accent: #e52b50;
+        --border: #f3d0dd;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        background: linear-gradient(180deg, #ffe8f0 0%, var(--bg) 100%);
+        color: var(--text);
+      }
+
+      main {
+        max-width: 820px;
+        margin: 0 auto;
+        padding: 24px 16px 48px;
+      }
+
+      .hero {
+        background: var(--accent);
+        color: #fff;
+        border-radius: 24px;
+        padding: 24px 20px;
+        margin-bottom: 18px;
+      }
+
+      .hero h1 {
+        margin: 0 0 10px;
+        font-size: 34px;
+        line-height: 1;
+      }
+
+      .hero p {
+        margin: 6px 0;
+        font-size: 16px;
+        line-height: 1.45;
+      }
+
+      .section {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        padding: 18px 16px;
+        margin-bottom: 14px;
+      }
+
+      h2 {
+        margin: 0 0 12px;
+        font-size: 22px;
+        color: var(--accent);
+      }
+
+      h3 {
+        margin: 16px 0 10px;
+        font-size: 17px;
+        color: var(--text);
+      }
+
+      p {
+        margin: 8px 0;
+        line-height: 1.55;
+      }
+
+      ul {
+        margin: 8px 0 0 18px;
+        padding: 0;
+      }
+
+      li {
+        margin: 7px 0;
+        line-height: 1.5;
+      }
+
+      .note {
+        color: var(--muted);
+      }
+
+      .warn {
+        font-weight: 700;
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <h1>Epsu Android Tester Script</h1>
+        <p>For: Android phone only</p>
+        <p>Audience: non-admin testers</p>
+        <p>Do not use this file for iPhone or admin testing.</p>
+      </section>
+
+      <section class="section">
+        <h2>Before You Start</h2>
+        <ul>
+          <li>Use a fresh installed build.</li>
+          <li>Make sure internet is on.</li>
+          <li>Allow notifications if Android asks.</li>
+          <li>Have access to the email inbox for the account you are testing.</li>
+        </ul>
+        <p class="warn">If the app asks for something that clearly needs admin approval, stop there and contact jtruu.</p>
+      </section>
+
+      <section class="section">
+        <h2>Important Rules</h2>
+        <ul>
+          <li>Do not use admin account.</li>
+          <li>Do not use any SQL.</li>
+          <li>Do not try to guess hidden steps.</li>
+          <li>If a school or regional Epsu needs approval, message jtruu.</li>
+          <li>If something looks broken, stop and message jtruu.</li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <h2>What You Are Testing</h2>
+        <p>You are checking that the app works normally for a regular Android user in these roles:</p>
+        <ul>
+          <li>guest</li>
+          <li>normal user</li>
+          <li>member</li>
+          <li>moderator if you are given a moderator invite</li>
+          <li>host if you are given a host account</li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <h2>Part 1: First Open</h2>
+        <ul>
+          <li>Open the app.</li>
+          <li>Check that the intro screen appears properly.</li>
+          <li>Check that buttons react.</li>
+          <li>Check that text fits the screen.</li>
+          <li>Check that nothing is cut off.</li>
+        </ul>
+
+        <h3>Part 2: Guest Mode</h3>
+        <ul>
+          <li>Open guest mode.</li>
+          <li>Try country selector.</li>
+          <li>Change country.</li>
+          <li>Start guest mode.</li>
+          <li>Open Home, Post, and Settings.</li>
+          <li>Go back out again.</li>
+        </ul>
+        <p class="note">Check that guest mode feels alive and not dead.</p>
+        <p class="warn">If there are no visible Epsus in guest mode, message jtruu.</p>
+      </section>
+
+      <section class="section">
+        <h2>Part 3: Create Account</h2>
+        <ul>
+          <li>Open Create account.</li>
+          <li>Fill all required fields.</li>
+          <li>Submit.</li>
+          <li>Check email.</li>
+          <li>Open confirmation link.</li>
+          <li>Return to app.</li>
+          <li>Make sure account can log in.</li>
+        </ul>
+        <p class="warn">If the confirmation link does not work, message jtruu.</p>
+
+        <h3>Part 4: Login</h3>
+        <ul>
+          <li>Test correct login.</li>
+          <li>Test wrong password.</li>
+          <li>Log out.</li>
+          <li>Log back in.</li>
+        </ul>
+        <p class="note">Make sure buttons react normally, keyboard behaves normally, and the screen is not cut off.</p>
+      </section>
+
+      <section class="section">
+        <h2>Part 5: Password Reset</h2>
+        <ul>
+          <li>Open Forgot password.</li>
+          <li>Send reset email.</li>
+          <li>Open the reset link from email.</li>
+          <li>Make sure it opens Epsu.</li>
+          <li>Set a new password.</li>
+          <li>Log in with the new password.</li>
+        </ul>
+        <p class="warn">If the reset link does not open the app or does not finish inside the app, message jtruu.</p>
+      </section>
+
+      <section class="section">
+        <h2>Part 6: Home Screen</h2>
+        <ul>
+          <li>Open Home.</li>
+          <li>Tap visible cards.</li>
+          <li>Switch between available Epsus.</li>
+          <li>Check if buttons react.</li>
+          <li>Check if text and logos look correct.</li>
+          <li>Check if posts load normally.</li>
+        </ul>
+        <p class="note">If an Epsu has no posts, that is not automatically a bug.</p>
+        <p class="warn">Only message jtruu if the screen looks broken or gets stuck.</p>
+      </section>
+
+      <section class="section">
+        <h2>Part 7: Joining Epsus</h2>
+        <ul>
+          <li>If there is an already approved Epsu available, try joining it.</li>
+          <li>Reopen it.</li>
+          <li>Make sure you stay joined.</li>
+        </ul>
+        <p class="warn">If the Epsu is pending approval, stop and contact jtruu.</p>
+
+        <h3>Part 8: Creating Epsus</h3>
+        <p>Only if you are told to test Epsu creation.</p>
+        <p><strong>School Epsu</strong></p>
+        <ul>
+          <li>Open school creation flow.</li>
+          <li>Type school name.</li>
+          <li>Type website.</li>
+          <li>Submit.</li>
+        </ul>
+        <p><strong>Regional Epsu</strong></p>
+        <ul>
+          <li>Open regional creation flow.</li>
+          <li>Choose country if needed.</li>
+          <li>Type region or city name.</li>
+          <li>Submit.</li>
+        </ul>
+        <p class="warn">After submission, do not expect it to become live instantly. Contact jtruu for approval.</p>
+      </section>
+
+      <section class="section">
+        <h2>Part 9: Post Screen</h2>
+        <p>If you are a joined member of an approved Epsu:</p>
+        <ul>
+          <li>Open Post.</li>
+          <li>Choose an Epsu.</li>
+          <li>Type title.</li>
+          <li>Type content.</li>
+          <li>Submit.</li>
+        </ul>
+        <p>Also test:</p>
+        <ul>
+          <li>search box</li>
+          <li>title box</li>
+          <li>content box</li>
+          <li>keyboard close behavior</li>
+        </ul>
+        <p class="note">If posting is blocked because you are not joined or are muted, that can be normal.</p>
+      </section>
+
+      <section class="section">
+        <h2>Part 10: Reactions And Reports</h2>
+        <ul>
+          <li>React to a post.</li>
+          <li>Remove your reaction if possible.</li>
+          <li>Report a post only if you were specifically told to create a moderation case.</li>
+        </ul>
+        <p class="note">Do not spam reports unless that is the planned test.</p>
+
+        <h3>Part 11: Moderator Flow</h3>
+        <p>Only do this if jtruu gave you a moderator invite link or QR.</p>
+        <ul>
+          <li>Open the invite.</li>
+          <li>Accept it.</li>
+          <li>Make sure moderator tools become available.</li>
+          <li>Open moderation screens.</li>
+          <li>Check that buttons react.</li>
+        </ul>
+        <p class="note">If there are no real cases waiting, some moderation screens may be empty. That is normal.</p>
+      </section>
+
+      <section class="section">
+        <h2>Part 12: Host Flow</h2>
+        <p>Only do this if jtruu gave you a host account.</p>
+        <ul>
+          <li>Open host tools.</li>
+          <li>Check moderation team screen.</li>
+          <li>Test host-only buttons.</li>
+        </ul>
+        <p class="warn">If anything needs approval or setup from admin, stop and contact jtruu.</p>
+
+        <h3>Part 13: Settings</h3>
+        <ul>
+          <li>Open legal links.</li>
+          <li>Test logout.</li>
+          <li>Open delete-account related screens.</li>
+          <li>Check notification-related parts.</li>
+          <li>Check password/account related parts.</li>
+        </ul>
+        <p class="warn">Do not actually delete the account unless jtruu told you to.</p>
+      </section>
+
+      <section class="section">
+        <h2>When To Contact Jtruu</h2>
+        <ul>
+          <li>an Epsu needs approval</li>
+          <li>a reset or confirmation link fails</li>
+          <li>the app gets stuck</li>
+          <li>the keyboard behaves badly</li>
+          <li>buttons do nothing</li>
+          <li>a screen is cut off or overlaps badly</li>
+          <li>you are blocked because a role or Epsu state is missing</li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <h2>Simple Result Message Format</h2>
+        <ul>
+          <li>guest mode worked</li>
+          <li>signup worked</li>
+          <li>reset link failed to open app</li>
+          <li>post screen keyboard behaved badly</li>
+          <li>join button did nothing</li>
+          <li>screen text was cut off on Android</li>
+        </ul>
+        <p class="note">Keep it short.</p>
+      </section>
+    </main>
+  </body>
+</html>
