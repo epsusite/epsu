@@ -180,6 +180,8 @@ begin
 end;
 $$;
 
+drop function if exists public.fetch_pending_regional_epsus();
+
 create or replace function public.fetch_pending_regional_epsus()
 returns table (
   id uuid,
@@ -212,6 +214,8 @@ as $$
   group by epsu.id, epsu.name, epsu.country_code, profile.email, epsu.created_at
   order by epsu.created_at asc;
 $$;
+
+drop function if exists public.fetch_regional_epsu_suggestions();
 
 create or replace function public.fetch_regional_epsu_suggestions()
 returns table (
