@@ -35,7 +35,7 @@ export default function SignUpScreen({ navigation, onSignUp, showGuestModeBubble
   const [password, setPassword] = useState('');
   const [countryCode, setCountryCode] = useState('');
   const [isCountryPickerVisible, setIsCountryPickerVisible] = useState(false);
-  const [isThirteenOrOlder, setIsThirteenOrOlder] = useState(false);
+  const [isEighteenOrOlder, setIsEighteenOrOlder] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
@@ -101,7 +101,7 @@ export default function SignUpScreen({ navigation, onSignUp, showGuestModeBubble
     return '';
   };
 
-  const validateAgeConfirmation = (checked) => (checked ? '' : 'You must confirm that you are 13 or older');
+  const validateAgeConfirmation = (checked) => (checked ? '' : 'You must confirm that you are 18 or older');
 
   const validateEmail = (val) => {
     const normalized = val.trim();
@@ -128,7 +128,7 @@ export default function SignUpScreen({ navigation, onSignUp, showGuestModeBubble
     const eErr = validateEmail(email);
     const pErr = validatePassword(password);
     const cErr = validateCountryCode(countryCode);
-    const aErr = validateAgeConfirmation(isThirteenOrOlder);
+    const aErr = validateAgeConfirmation(isEighteenOrOlder);
     const tErr = validateTerms(acceptedTerms);
     setEmailError(eErr);
     setPasswordError(pErr);
@@ -143,7 +143,7 @@ export default function SignUpScreen({ navigation, onSignUp, showGuestModeBubble
       email: normalizedEmail,
       password,
       countryCode: normalizeCountryCode(countryCode),
-      isThirteenOrOlder,
+      isThirteenOrOlder: isEighteenOrOlder,
       acceptedTerms,
     });
 
@@ -222,9 +222,11 @@ export default function SignUpScreen({ navigation, onSignUp, showGuestModeBubble
               {pendingConfirmationEmail ? (
                 <>
                   <Text style={styles.title}>Confirm your email</Text>
-                  <Text style={styles.confirmationText}>
-                    Confirmation email sent to you! Open it on your phone to instantly log in, otherwise you must log in separately to Epsu
-                  </Text>
+                  <View style={styles.noticeCard}>
+                    <Text style={styles.confirmationText}>
+                      Confirmation email sent to you! Usually under a minute. Open it on your phone to instantly log in
+                    </Text>
+                  </View>
                   <TouchableOpacity
                     style={styles.button}
                     onPress={() => navigation.navigate('Login')}
@@ -311,17 +313,17 @@ export default function SignUpScreen({ navigation, onSignUp, showGuestModeBubble
 
                   <View style={styles.fieldWrapper}>
                     <AppCheckboxRow
-                      checked={isThirteenOrOlder}
+                      checked={isEighteenOrOlder}
                       onPress={() => {
-                        const nextValue = !isThirteenOrOlder;
-                        setIsThirteenOrOlder(nextValue);
+                        const nextValue = !isEighteenOrOlder;
+                        setIsEighteenOrOlder(nextValue);
                         if (ageError) {
                           setAgeError(validateAgeConfirmation(nextValue));
                         }
                       }}
                       theme="dark"
                     >
-                      I am 13 or older
+                      I am 18 or older
                     </AppCheckboxRow>
                     {ageError ? <Text style={styles.errorText}>{ageError}</Text> : null}
                   </View>
@@ -338,11 +340,11 @@ export default function SignUpScreen({ navigation, onSignUp, showGuestModeBubble
                       }}
                       theme="dark"
                     >
-                      By continuing, you agree to Epsu&apos;s{' '}
+                      By continuing, you agree to Epsu&apos;s Terms of Service with EULA and confirm that you have read Epsu&apos;s{' '}
                       <Text style={styles.inlineLink} onPress={() => openDocument(TERMS_URL)}>
                         Terms of Service
                       </Text>{' '}
-                      and confirm that you have read Epsu&apos;s{' '}
+                      and Epsu&apos;s{' '}
                       <Text style={styles.inlineLink} onPress={() => openDocument(PRIVACY_URL)}>
                         Privacy Policy
                       </Text>
@@ -431,6 +433,15 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginBottom: 6,
   },
+  noticeCard: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#e52b50',
+    borderRadius: 24,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    maxWidth: 340,
+    marginBottom: 24,
+  },
   helperText: {
     color: 'rgba(255,255,255,0.8)',
     fontSize: 13,
@@ -501,10 +512,9 @@ const styles = StyleSheet.create({
   },
   confirmationText: {
     color: '#fff',
-    fontSize: 16,
-    lineHeight: 24,
-    fontWeight: '600',
-    marginBottom: 24,
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: '700',
   },
 });
 

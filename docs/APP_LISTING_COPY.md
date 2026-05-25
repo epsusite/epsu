@@ -4,12 +4,15 @@
 Epsu
 
 ## Short description
-Anonymous local and school communities with hourly post drops.
+18+ anonymous local and school communities with hourly post drops.
 
 ## Full description
-Epsu is a place-based anonymous community app for local areas and schools.
+Epsu is an 18+ place-based anonymous community app for local areas and schools.
 
 Users join Epsus, submit anonymous posts, react, report harmful content, apply to school communities, and receive review and moderation updates.
+
+Age requirement:
+- Epsu is intended only for users who are 18 years old or older.
 
 What the app currently does:
 - Anonymous posts inside local and school Epsus
@@ -17,7 +20,7 @@ What the app currently does:
 - Short-lived feed cycles instead of permanent archives
 - Reactions and user reports
 - Moderator review for reported posts and queued keyword-flagged posts
-- Owner/moderator tools
+- Host/moderator tools
 - Optional push notifications for important updates
 
 What makes Epsu different:

@@ -4,13 +4,13 @@ Use this in App Store Connect review notes, adjusted to the actual reviewer acco
 
 ## Core note
 
-Epsu is an anonymous community app for local and school communities. Ordinary users do not see author identities, user profiles, direct messages, follows, or mentions. Users interact with anonymous posts inside moderated communities.
+Epsu is an 18+ account-based moderated community app for local and school communities. Ordinary users do not see author identities, user profiles, direct messages, follows, or mentions. Posts are pseudonymous to ordinary users, while backend accountability is retained for moderation and safety enforcement.
 
 The app includes:
 - in-app post reporting
 - moderator and admin review tools
 - temporary 24-hour mutes
-- user-controlled blocking of anonymous authors from the user’s own feed
+- user-controlled blocking of post authors from their own feed
 - in-app account deletion
 
 ## Login note

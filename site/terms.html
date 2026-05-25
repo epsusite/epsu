@@ -23,7 +23,7 @@
 <body>
     <div class="legal-container">
         <h1>Terms of Service</h1>
-        <p>Last Updated: May 6, 2026</p>
+        <p>Last Updated: May 25, 2026</p>
 
         <div class="toc">
             <h2>Table of Contents</h2>
@@ -51,7 +51,8 @@
 
         <div class="legal-section" id="introduction">
             <h2>1. Introduction</h2>
-            <p>Welcome to Epsu ("we," "us," "our"). These Terms of Service ("Terms") govern your access to and use of the Epsu mobile application, website (https://epsu.site), and all related services (collectively, the "Service"). Epsu is a mobile-first anonymous local community platform that organizes participation around place-based and institution-based communities called "Epsus," including regional (city, state, country) and school-based communities.</p>
+            <p>Welcome to Epsu ("we," "us," "our"). These Terms of Service ("Terms") govern your access to and use of the Epsu mobile application, website (https://epsu.site), and all related services (collectively, the "Service"). Epsu is a mobile-first local community platform that organizes participation around place-based and institution-based communities called "Epsus," including regional (city, state, country) and school-based communities. Posts are identity-hidden to ordinary users, while backend records are retained for moderation, safety, and account management.</p>
+            <p>These Terms also serve as the End User License Agreement ("EULA") for the Epsu application except to the extent that a platform storefront's mandatory standard terms apply and cannot be displaced. By downloading, installing, accessing, or using the application or Service, you accept this license and agree to use the application only as permitted by these Terms.</p>
             <p>Please read these Terms carefully before using the Service. By accessing or using the Service, you agree to be bound by these Terms and our <a href="/privacy">Privacy Policy</a> and <a href="/guidelines">Community Guidelines</a>, which are incorporated herein by reference. If you do not agree to these Terms, you may not access or use the Service.</p>
         </div>
 
@@ -65,8 +66,8 @@
             <h2>3. Eligibility</h2>
             <p>To use the Service, you must meet the following eligibility requirements:</p>
             <ul>
-                <li>You must be at least 13 years old, or the minimum age required by the laws of your jurisdiction (if higher than 13). For users in the European Union, you must be at least 16 years old to provide consent for data processing, unless a lower age is permitted by your member state's laws, in which case you represent that your parent or guardian has provided verifiable consent.</li>
-                <li>You must have the legal capacity to enter into a binding contract, or have your parent/guardian's consent to do so.</li>
+                <li>You must be at least 18 years old to create an account, access, or use the Service.</li>
+                <li>You must have the legal capacity to enter into a binding contract.</li>
                 <li>You may not use the Service if you have been previously suspended or terminated from the Service.</li>
                 <li>You may not use the Service if you are prohibited from receiving services under applicable law.</li>
             </ul>
@@ -89,17 +90,18 @@
             <p>Epsu provides an anonymous community platform where users can:</p>
             <ul>
                 <li>Join regional Epsus (city, state, country) or apply to school-based Epsus, with a hard limit of 1 regional Epsu and 3 school Epsus per user.</li>
-                <li>Submit anonymous posts, which are queued and released in hourly UTC batches (one post per Epsu per hourly cycle as enforced by backend RPC).</li>
+                <li>Submit posts that are hidden from ordinary users' identity view, with posting governed by hourly UTC batch limits enforced by backend RPCs. The current Service design allows up to 2 top-level posts and 1 reply per Epsu per hourly cycle.</li>
                 <li>View released posts from Epsus they have access to, with posts automatically removed from the user's feed after reacting to them.</li>
-                <li>Reply to released posts within the same Epsu, with reply-to-post scoping enforced client-side via navigation parameters.</li>
+                <li>Reply to released posts within the same Epsu, with reply-to-post scope enforced by backend RPC validation.</li>
                 <li>React to posts with likes or dislikes, with a progressive auto-deletion threshold based on participation rates and dislike ratios (0.80+ dislike ratio for low participation, 0.51+ for high participation).</li>
-                <li>Report posts for violations of Community Guidelines, with reports reviewed by moderators/owners.</li>
-                <li>Block anonymous authors to hide their future posts and replies from their feed, via backend-stored block relationships.</li>
-                <li>For school Epsus: apply for membership with a short answer, with owners reviewing applications; owners and moderators have scoped governance tools including report resolution, post removal, 24-hour user muting, member management, moderator invite creation via QR code/deep link, and moderation records access.</li>
+                <li>Report posts for violations of Community Guidelines, with reports reviewed by moderators, hosts, or platform admins as applicable.</li>
+                <li>Block post authors to hide their future posts and replies from their feed, via backend-stored block relationships.</li>
+                <li>For school Epsus: apply for membership with a short answer, with hosts reviewing applications; hosts and moderators have scoped governance tools including report resolution, post removal, Epsu-scoped 24-hour muting, member management, moderator invite creation via QR code/deep link, and moderation records access.</li>
                 <li>For regional Epsus: view country-scoped communities, suggest new regional Epsus, with suggestions reviewed by platform admins before approval.</li>
-                <li>Receive optional push notifications for moderation updates and account activity, with push tokens stored per device.</li>
+                <li>Receive optional push notifications for app events supported by the Service, including moderation-related actions, hourly post-drop updates, and invite or community activity, with push tokens stored per device.</li>
             </ul>
             <p>Posts are temporary and deleted after their lifecycle ends, as described in our Privacy Policy. The Service is currently provided on an "as-is" beta basis, and we may modify, suspend, or discontinue any part of the Service at any time without notice.</p>
+            <p>Subject to these Terms, we grant you a limited, personal, non-exclusive, non-transferable, non-sublicensable, revocable license to install and use the Epsu application on devices that you own or control solely for your personal, non-commercial use of the Service. This license does not transfer any ownership rights in the application or Service to you.</p>
         </div>
 
         <div class="legal-section" id="user-content">
@@ -118,6 +120,7 @@
 
         <div class="legal-section" id="prohibited-conduct">
             <h2>7. Prohibited Conduct</h2>
+            <p>We have zero tolerance for objectionable content or abusive users. Accounts, posts, replies, application materials, and other activity may be restricted, removed, or terminated where we determine that a user has engaged in harassment, hate speech, threats, sexual exploitation, doxxing, scams, spam, illegal activity, impersonation, or other abusive conduct.</p>
             <p>You agree not to engage in any of the following prohibited conduct:</p>
             <ul>
                 <li>Violating any applicable law, regulation, or third-party right, including data protection, intellectual property, and criminal laws.</li>
@@ -146,9 +149,9 @@
             <p>We reserve the right to monitor, review, and moderate User Content and user conduct at our sole discretion, including:</p>
             <ul>
                 <li>Reviewing user reports of violating content, with reports grouped by post and resolved as dismissed, post removed, or user muted.</li>
-                <li>Reviewing keyword-flagged posts before release from the hourly queue, with pre-release moderation by assigned moderators/owners.</li>
-                <li>Taking enforcement actions, including removing posts, muting users for 24 hours, dismissing reports, revoking moderator/owner privileges, and terminating accounts.</li>
-                <li>Appointing moderators and owners for Epsus, with scoped authority to manage their communities as defined in our Community Guidelines.</li>
+                <li>Reviewing keyword-flagged posts before release from the hourly queue, with pre-release moderation by assigned moderators, hosts, or platform admins.</li>
+                <li>Taking enforcement actions, including removing posts, muting users for 24 hours within the relevant Epsu, dismissing reports, revoking moderator or host privileges, and restricting or terminating accounts where appropriate.</li>
+                <li>Appointing moderators and hosts for Epsus, with scoped authority to manage their communities as defined in our Community Guidelines.</li>
                 <li>Using progressive auto-deletion thresholds to remove posts with high dislike ratios, as defined in Section 5.</li>
             </ul>
             <p>We are not responsible for any User Content posted by users, and we do not guarantee that all violating content will be removed. Moderation decisions are final unless appealed in accordance with our Community Guidelines. We may retain moderation action records indefinitely for audit and safety purposes.</p>
@@ -165,7 +168,7 @@
                 <li>We are required to do so by applicable law or government request.</li>
                 <li>Your account is associated with fraudulent or harmful activity.</li>
             </ul>
-            <p>Account deletion will remove your auth account and profile-linked records (username, date of birth, country, notification preferences). Live posts you submitted will remain until their normal deletion cycle ends, with your author link removed to preserve anonymity. You may not delete your account while you are the owner of an active Epsu; you must transfer ownership or delete the Epsu first.</p>
+            <p>Account deletion will remove your auth account and profile-linked records (such as username, date of birth, country, notification preferences, memberships, suggestions, push tokens, presence, and authored posts). You may not delete your account while you are the host of an active Epsu; you must resolve that management status first.</p>
         </div>
 
         <div class="legal-section" id="disclaimers">
@@ -214,7 +217,7 @@
             <p>If you have any questions about these Terms, please contact us at:</p>
             <p>Email: <a href="mailto:epsu.site@protonmail.com">epsu.site@protonmail.com</a></p>
             <p>Postal Address: [To be added upon Estonian company formation]</p>
-            <p>Data Protection Officer (if appointed): <a href="mailto:epsu.site@protonmail.com">epsu.site@protonmail.com</a></p>
+            <p>Privacy contact: <a href="mailto:epsu.site@protonmail.com">epsu.site@protonmail.com</a></p>
         </div>
 
         <div class="legal-section" id="eu-supplementary">
@@ -223,8 +226,8 @@
             <ul>
                 <li>We comply with the EU General Data Protection Regulation (GDPR) and the Digital Services Act (DSA) 2024.</li>
                 <li>You have the right to lodge a complaint with your local data protection authority if you believe our processing of your personal data violates GDPR.</li>
-                <li>We provide clear in-app and web-based reporting mechanisms for illegal content, and will process reports within 24-48 hours as required by the DSA.</li>
-                <li>We will provide you with a clear written statement of reasons if we take moderation action against your content or account, including the specific violation and available appeal process.</li>
+                <li>We provide in-app and web-based reporting channels for illegal content and will review such reports as promptly as reasonably practicable.</li>
+                <li>If we take moderation action against your content or account, we may communicate the basis for that action through available in-app records, account history, or support correspondence, depending on context and system behavior.</li>
                 <li>We do not use automated decision-making with legal or similarly significant effects, including fully automated moderation decisions that result in account termination.</li>
             </ul>
         </div>
