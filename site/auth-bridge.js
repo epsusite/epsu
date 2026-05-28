@@ -37,10 +37,35 @@
   const desktopHandoffBody = document.getElementById('desktop-handoff-body');
   const desktopHandoffQr = document.getElementById('desktop-handoff-qr');
 
+  function renderQrValue(target, value) {
+    target.innerHTML = '';
+
+    if (window.QRCode && typeof window.QRCode.toCanvas === 'function') {
+      const qrCanvas = document.createElement('canvas');
+      target.appendChild(qrCanvas);
+      return window.QRCode.toCanvas(qrCanvas, value, {
+        width: 220,
+        margin: 1,
+        color: {
+          dark: '#20131a',
+          light: '#ffffff',
+        },
+      });
+    }
+
+    const qrImage = document.createElement('img');
+    qrImage.width = 220;
+    qrImage.height = 220;
+    qrImage.alt = 'Phone login QR code';
+    qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(value)}`;
+    target.appendChild(qrImage);
+    return Promise.resolve();
+  }
+
   openButton.href = appUrl;
 
   async function createDesktopHandoff(tokenHashValue, otpTypeValue) {
-    if (!desktopHandoffCard || !desktopHandoffQr || !window.QRCode) {
+    if (!desktopHandoffCard || !desktopHandoffQr) {
       return;
     }
 
@@ -69,17 +94,7 @@
     desktopHandoffBody.textContent = action === 'reset-password'
       ? 'Scan this QR with the phone that has Epsu installed to open the new password screen.'
       : 'Scan this QR with the phone that has Epsu installed.';
-    const qrCanvas = document.createElement('canvas');
-    desktopHandoffQr.innerHTML = '';
-    desktopHandoffQr.appendChild(qrCanvas);
-    await window.QRCode.toCanvas(qrCanvas, payload.handoffUrl, {
-      width: 220,
-      margin: 1,
-      color: {
-        dark: '#20131a',
-        light: '#ffffff',
-      },
-    });
+    await renderQrValue(desktopHandoffQr, payload.handoffUrl);
   }
 
   if (errorDescription) {
