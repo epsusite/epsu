@@ -2,6 +2,9 @@
   const AUTH_HANDOFF_FUNCTION_URL = 'https://xzgzzuxmtjrppavvynuy.supabase.co/functions/v1/auth-handoff';
   const action = document.body.dataset.authAction;
   const actionPath = action === 'reset-password' ? 'reset-password' : 'auth/confirm';
+  const handoffPurpose = action === 'reset-password'
+    ? 'password_reset_mobile_recovery'
+    : 'signup_confirm_mobile_login';
   const query = window.location.search || '';
   const hash = window.location.hash || '';
   const queryParams = new URLSearchParams(window.location.search);
@@ -52,6 +55,7 @@
         action: 'create_handoff',
         token_hash: tokenHashValue,
         type: otpTypeValue,
+        purpose: handoffPurpose,
       }),
     });
 
@@ -60,7 +64,9 @@
       throw new Error(payload?.error || 'Could not prepare the phone login QR');
     }
 
-    desktopHandoffBody.textContent = 'Scan this QR with the phone that has Epsu installed.';
+    desktopHandoffBody.textContent = action === 'reset-password'
+      ? 'Scan this QR with the phone that has Epsu installed to open the new password screen.'
+      : 'Scan this QR with the phone that has Epsu installed.';
     const qrCanvas = document.createElement('canvas');
     desktopHandoffQr.innerHTML = '';
     desktopHandoffQr.appendChild(qrCanvas);
@@ -97,7 +103,7 @@
     title.textContent = 'Open Epsu to reset your password';
     body.textContent =
       'If you are on your phone, Epsu should open automatically. If you are on a computer, return to your phone and open the app there.';
-    note.textContent = 'The reset is completed inside the app, not on this web page.';
+    note.textContent = 'The reset is completed inside the app, not on this web page. On desktop, scan the QR to continue on your phone.';
     openButton.textContent = 'Open Epsu';
   } else {
     title.textContent = 'Email confirmed';
@@ -114,7 +120,7 @@
     return;
   }
 
-  if (action === 'confirm' && tokenHash && otpType) {
+  if ((action === 'confirm' || action === 'reset-password') && tokenHash && otpType) {
     createDesktopHandoff(tokenHash, otpType).catch((error) => {
       if (!desktopHandoffCard || !desktopHandoffBody) {
         return;
