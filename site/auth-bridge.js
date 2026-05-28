@@ -23,7 +23,9 @@
   const code = params.get('code');
   const accessToken = params.get('access_token');
   const refreshToken = params.get('refresh_token');
-  const hasAuthPayload = Boolean(code || (accessToken && refreshToken));
+  const tokenHash = params.get('token_hash');
+  const otpType = params.get('type');
+  const hasAuthPayload = Boolean(code || (accessToken && refreshToken) || (tokenHash && otpType));
   const isMobile = /android|iphone|ipad|ipod/i.test(navigator.userAgent);
   const appUrl = 'epsu://' + actionPath + query + hash;
 
