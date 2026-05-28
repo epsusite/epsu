@@ -136,3 +136,22 @@ h1 {
   text-decoration: none;
   box-shadow: 0 14px 30px rgba(213, 52, 94, 0.16);
 }
+
+.auth-handoff-card h2 {
+  margin: 0 0 8px;
+  font-size: 20px;
+}
+
+.qr-shell {
+  display: flex;
+  justify-content: center;
+}
+
+.qr-frame {
+  min-width: 220px;
+  min-height: 220px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid #f1c8d6;
+  background: #fff;
+}
