@@ -53,7 +53,10 @@
     <script>
       const currentUrl = new URL(window.location.href);
       const token = currentUrl.searchParams.get('token') || '';
-      const appUrl = token ? `epsu://auth-handoff/${encodeURIComponent(token)}` : 'epsu://';
+      const purpose = currentUrl.searchParams.get('purpose') || '';
+      const appUrl = token
+        ? `epsu://auth-handoff/${encodeURIComponent(token)}${purpose ? `?purpose=${encodeURIComponent(purpose)}` : ''}`
+        : 'epsu://';
       const handoffLink = document.getElementById('handoff-link');
       const openAppLink = document.getElementById('open-app');
       const copyLink = document.getElementById('copy-link');
