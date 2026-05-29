@@ -39,8 +39,9 @@ import { useAppNotifications } from './lib/useAppNotifications';
 import { useEpsuPresence } from './lib/useEpsuPresence';
 import { subscribeToNetworkState } from './lib/networkGuard';
 import { fetchEpsuActivePostCounts, fetchModeratedEpsuIds, fetchHostedEpsuIds, redeemInvite } from './lib/api/epsus';
-import { fetchGuestEpsuFeedPage, fetchGuestPostById, fetchGuestPosts, fetchPosts } from './lib/api/feed';
+import { fetchGuestEpsuFeedPage, fetchGuestPostById, fetchPosts } from './lib/api/feed';
 import { fetchFlaggedQueuedPostsForEpsu } from './lib/api/moderation';
+import { redeemAuthHandoff } from './lib/api/auth';
 import {
   fetchGuestEpsus,
   fetchEpsusWithCountry,
@@ -48,6 +49,7 @@ import {
   fetchVisibleMemberships,
 } from './lib/schoolApi';
 import { addReviewedPostIdByEpsu } from './lib/appStateTransforms';
+import { getScreenshotFixture } from './lib/screenshotFixtures';
 
 let NotificationsModule = null;
 try {
@@ -70,11 +72,41 @@ const HomeStack = createNativeStackNavigator();
 const SettingsStack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 const PENDING_MOD_INVITE_STORAGE_KEY = 'epsu_pending_mod_invite_token';
+const PENDING_AUTH_HANDOFF_STORAGE_KEY = 'epsu_pending_auth_handoff_token';
+const PASSWORD_RECOVERY_MODE_STORAGE_KEY = 'epsu_password_recovery_mode_v1';
 const INTRO_COMPLETED_STORAGE_KEY = 'has_completed_intro_v1';
 const GUEST_MODE_REMAINING_SECONDS_STORAGE_KEY = 'epsu_guest_mode_remaining_seconds_v1';
 const LAST_GUEST_COUNTRY_CODE_STORAGE_KEY = 'epsu_last_guest_country_code_v1';
 const FEED_REFRESH_FALLBACK_MS = 300000;
 const GUEST_MODE_DURATION_SECONDS = 60;
+
+function normalizeGuestEpsus(guestEpsus) {
+  return guestEpsus.map((epsu) => ({
+    id: epsu.id,
+    slug: epsu.slug,
+    name: epsu.name,
+    code: epsu.code,
+    scope: epsu.scope,
+    website: epsu.website,
+    review_status: epsu.review_status,
+    country_code: epsu.country_code,
+    logo_path: epsu.logo_path,
+    is_trial: epsu.is_trial,
+    trial_member_goal: epsu.trial_member_goal,
+    trial_started_at: epsu.trial_started_at,
+    trial_ends_at: epsu.trial_ends_at,
+  }));
+}
+
+function mapGuestPopulation(guestEpsus) {
+  return guestEpsus.reduce((accumulator, epsu) => {
+    accumulator[epsu.id] = {
+      memberCount: epsu.member_count ?? 0,
+      onlineCount: epsu.online_count ?? 0,
+    };
+    return accumulator;
+  }, {});
+}
 
 function IntroBurgerScreen({ navigation }) {
   return (
@@ -295,6 +327,32 @@ function getModeratorInviteToken(url) {
   return null;
 }
 
+function getAuthHandoffDetails(url) {
+  if (!url) {
+    return null;
+  }
+
+  const params = getDeepLinkParams(url);
+  const queryToken = params.get('token');
+  const purpose = params.get('purpose') || null;
+  if (queryToken) {
+    return {
+      token: queryToken,
+      purpose,
+    };
+  }
+
+  const handoffMatch = url.match(/auth-handoff\/([^?#/]+)/i);
+  if (handoffMatch?.[1]) {
+    return {
+      token: decodeURIComponent(handoffMatch[1]),
+      purpose,
+    };
+  }
+
+  return null;
+}
+
 function logModeratorInvite(message, details = null) {
   if (details == null) {
     console.log(`[mod-invite] ${message}`);
@@ -305,6 +363,18 @@ function logModeratorInvite(message, details = null) {
     ? details
     : JSON.stringify(details);
   console.log(`[mod-invite] ${message} ${normalizedDetails}`);
+}
+
+function logAuthHandoff(message, details = null) {
+  if (details == null) {
+    console.log(`[auth-handoff] ${message}`);
+    return;
+  }
+
+  const normalizedDetails = typeof details === 'string'
+    ? details
+    : JSON.stringify(details);
+  console.log(`[auth-handoff] ${message} ${normalizedDetails}`);
 }
 
 async function storePendingModeratorInviteToken(token) {
@@ -333,6 +403,48 @@ async function clearPendingModeratorInviteToken(expectedToken = null) {
     expectedTokenPrefix: expectedToken ? expectedToken.slice(0, 8) : null,
   });
   return true;
+}
+
+async function storePendingAuthHandoffToken(payload) {
+  if (!payload?.token) {
+    return;
+  }
+
+  await AsyncStorage.setItem(PENDING_AUTH_HANDOFF_STORAGE_KEY, JSON.stringify(payload));
+  logAuthHandoff('stored pending token', {
+    tokenPrefix: payload.token.slice(0, 8),
+    purpose: payload.purpose ?? null,
+  });
+}
+
+async function clearPendingAuthHandoffToken(expectedToken = null) {
+  if (expectedToken) {
+    const storedPayload = await AsyncStorage.getItem(PENDING_AUTH_HANDOFF_STORAGE_KEY).catch(() => null);
+    const storedToken = storedPayload ? JSON.parse(storedPayload)?.token ?? null : null;
+    if (storedToken && storedToken !== expectedToken) {
+      logAuthHandoff('skipped clearing pending token because a newer token is stored', {
+        expectedTokenPrefix: expectedToken.slice(0, 8),
+        storedTokenPrefix: storedToken.slice(0, 8),
+      });
+      return false;
+    }
+  }
+
+  await AsyncStorage.removeItem(PENDING_AUTH_HANDOFF_STORAGE_KEY);
+  logAuthHandoff('cleared pending token', {
+    expectedTokenPrefix: expectedToken ? expectedToken.slice(0, 8) : null,
+  });
+  return true;
+}
+
+async function persistPasswordRecoveryMode() {
+  await AsyncStorage.setItem(PASSWORD_RECOVERY_MODE_STORAGE_KEY, 'true');
+  logAuthHandoff('persisted password recovery mode');
+}
+
+async function clearPersistedPasswordRecoveryMode() {
+  await AsyncStorage.removeItem(PASSWORD_RECOVERY_MODE_STORAGE_KEY);
+  logAuthHandoff('cleared password recovery mode');
 }
 
 function PostTabIcon({ focused }) {
@@ -386,33 +498,74 @@ function HomeBaseScreen(props) {
   const data = useAppData();
   const actions = useAppActions();
   const session = useAppSession();
+  const screenshotFixture = getScreenshotFixture(process.env.EXPO_PUBLIC_SCREENSHOT_FIXTURE);
+  const homeProps = screenshotFixture
+    ? {
+        epsus: screenshotFixture.epsus,
+        posts: screenshotFixture.posts,
+        memberships: screenshotFixture.memberships,
+        epsuPopulationById: screenshotFixture.epsuPopulationById,
+        activePostCountByEpsu: screenshotFixture.activePostCountByEpsu,
+        reviewedPostIdsByEpsu: screenshotFixture.reviewedPostIdsByEpsu,
+        reportedPostIds: screenshotFixture.reportedPostIds,
+        repliedToPostIds: screenshotFixture.repliedToPostIds,
+        moderatedEpsuIds: screenshotFixture.moderatedEpsuIds,
+        hostedEpsuIds: screenshotFixture.hostedEpsuIds,
+        userMemberships: screenshotFixture.userMemberships,
+        hiddenEpsuIds: screenshotFixture.hiddenEpsuIds,
+        blockedAuthorIds: screenshotFixture.blockedAuthorIds,
+        currentCountryCode: screenshotFixture.currentCountryCode,
+        currentIsAdmin: screenshotFixture.currentIsAdmin,
+        isGuestMode: screenshotFixture.isGuestMode,
+        screenshotMode: screenshotFixture.screenshotMode,
+      }
+    : {
+        epsus: data.epsus,
+        posts: data.posts,
+        memberships: data.memberships,
+        epsuPopulationById: data.epsuPopulationById,
+        activePostCountByEpsu: data.activePostCountByEpsu,
+        reviewedPostIdsByEpsu: data.reviewedPostIdsByEpsu,
+        reportedPostIds: data.reportedPostIds,
+        repliedToPostIds: data.repliedToPostIds,
+        moderatedEpsuIds: data.moderatedEpsuIds,
+        hostedEpsuIds: data.hostedEpsuIds,
+        userMemberships: data.userMemberships,
+        hiddenEpsuIds: data.hiddenEpsuIds,
+        blockedAuthorIds: data.blockedAuthorIds,
+        currentCountryCode: session.currentCountryCode,
+        currentIsAdmin: session.currentIsAdmin,
+        isGuestMode: session.isGuestMode,
+        screenshotMode: false,
+      };
 
   return (
     <HomeScreen
       {...props}
-      epsus={data.epsus}
-      posts={data.posts}
-      memberships={data.memberships}
-      epsuPopulationById={data.epsuPopulationById}
-      activePostCountByEpsu={data.activePostCountByEpsu}
-      reviewedPostIdsByEpsu={data.reviewedPostIdsByEpsu}
-      reportedPostIds={data.reportedPostIds}
-      repliedToPostIds={data.repliedToPostIds}
+      epsus={homeProps.epsus}
+      posts={homeProps.posts}
+      memberships={homeProps.memberships}
+      epsuPopulationById={homeProps.epsuPopulationById}
+      activePostCountByEpsu={homeProps.activePostCountByEpsu}
+      reviewedPostIdsByEpsu={homeProps.reviewedPostIdsByEpsu}
+      reportedPostIds={homeProps.reportedPostIds}
+      repliedToPostIds={homeProps.repliedToPostIds}
       onReactToPost={actions.onReactToPost}
       onReportPost={actions.onReportPost}
       onBlockPostAuthor={actions.onBlockPostAuthor}
-      moderatedEpsuIds={data.moderatedEpsuIds}
-      hostedEpsuIds={data.hostedEpsuIds}
-      userMemberships={data.userMemberships}
-      hiddenEpsuIds={data.hiddenEpsuIds}
-      blockedAuthorIds={data.blockedAuthorIds}
+      moderatedEpsuIds={homeProps.moderatedEpsuIds}
+      hostedEpsuIds={homeProps.hostedEpsuIds}
+      userMemberships={homeProps.userMemberships}
+      hiddenEpsuIds={homeProps.hiddenEpsuIds}
+      blockedAuthorIds={homeProps.blockedAuthorIds}
       onLeaveEpsu={actions.onLeaveEpsu}
       onJoinEpsu={actions.onJoinEpsu}
       onFetchEpsuFeedPage={actions.onFetchEpsuFeedPage}
       onFetchPostById={actions.onFetchPostById}
-      currentCountryCode={session.currentCountryCode}
-      currentIsAdmin={session.currentIsAdmin}
-      isGuestMode={session.isGuestMode}
+      currentCountryCode={homeProps.currentCountryCode}
+      currentIsAdmin={homeProps.currentIsAdmin}
+      isGuestMode={homeProps.isGuestMode}
+      screenshotMode={homeProps.screenshotMode}
       onGuestLockedAction={actions.onGuestLockedAction}
     />
   );
@@ -850,6 +1003,8 @@ function OfflineGate() {
 }
 
 function BootScreen({ title = 'Opening Epsu', message = 'Preparing your app' }) {
+  const insets = useSafeAreaInsets();
+
   return (
     <ImageBackground
       source={require('./assets/images/1774535505571.jpg')}
@@ -867,6 +1022,8 @@ function BootScreen({ title = 'Opening Epsu', message = 'Preparing your app' }) 
           flex: 1,
           justifyContent: 'center',
           paddingHorizontal: 28,
+          paddingTop: insets.top + 20,
+          paddingBottom: Math.max(insets.bottom, 20),
           backgroundColor: 'rgba(247,231,238,0.38)',
         }}
       >
@@ -936,20 +1093,33 @@ export default function App() {
   const [unreadAppNotifications, setUnreadAppNotifications] = useState([]);
   const [isShowingAppNotification, setIsShowingAppNotification] = useState(false);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
+  const [pendingRecoveryAfterAuth, setPendingRecoveryAfterAuth] = useState(false);
   const [isCompletingAuthLink, setIsCompletingAuthLink] = useState(false);
   const [authRefreshNonce, setAuthRefreshNonce] = useState(0);
   const [isOnline, setIsOnline] = useState(true);
   const [pendingModeratorInviteToken, setPendingModeratorInviteToken] = useState(null);
+  const [pendingAuthHandoff, setPendingAuthHandoff] = useState(null);
   const [isRedeemingModeratorInvite, setIsRedeemingModeratorInvite] = useState(false);
+  const [isRedeemingAuthHandoff, setIsRedeemingAuthHandoff] = useState(false);
   const [isBootstrapping, setIsBootstrapping] = useState(false);
   const [bootMessage, setBootMessage] = useState('Preparing your app');
   const [hasHydratedAppData, setHasHydratedAppData] = useState(false);
   const isAuthenticatedRef = React.useRef(isAuthenticated);
   const pendingModeratorInviteTokenRef = React.useRef(pendingModeratorInviteToken);
+  const pendingAuthHandoffRef = React.useRef(pendingAuthHandoff);
+  const isRedeemingAuthHandoffRef = React.useRef(isRedeemingAuthHandoff);
 
   useEffect(() => {
     pendingModeratorInviteTokenRef.current = pendingModeratorInviteToken;
   }, [pendingModeratorInviteToken]);
+
+  useEffect(() => {
+    pendingAuthHandoffRef.current = pendingAuthHandoff;
+  }, [pendingAuthHandoff]);
+
+  useEffect(() => {
+    isRedeemingAuthHandoffRef.current = isRedeemingAuthHandoff;
+  }, [isRedeemingAuthHandoff]);
 
   useEffect(() => {
     let isActive = true;
@@ -1039,8 +1209,12 @@ export default function App() {
       return;
     }
 
-    setGuestCountryCode(countryCode);
-    void AsyncStorage.setItem(LAST_GUEST_COUNTRY_CODE_STORAGE_KEY, countryCode).catch(() => {});
+    const normalizedGuestCountryCode = countryCode || null;
+    setGuestCountryCode(normalizedGuestCountryCode);
+    const persistGuestCountryCode = normalizedGuestCountryCode
+      ? AsyncStorage.setItem(LAST_GUEST_COUNTRY_CODE_STORAGE_KEY, normalizedGuestCountryCode)
+      : AsyncStorage.removeItem(LAST_GUEST_COUNTRY_CODE_STORAGE_KEY);
+    void persistGuestCountryCode.catch(() => {});
     setIsGuestPromptOpen(false);
     setIsGuestMode(true);
   }, [guestSecondsLeft]);
@@ -1070,7 +1244,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!isGuestMode || !guestCountryCode || !isOnline) {
+    if (!isGuestMode || !isOnline) {
       return undefined;
     }
 
@@ -1080,25 +1254,9 @@ export default function App() {
       setIsGuestBootstrapping(true);
 
       try {
-        const nextGuestEpsus = await fetchGuestEpsus(guestCountryCode);
-        const nextPopulation = nextGuestEpsus.reduce((accumulator, epsu) => {
-          accumulator[epsu.id] = {
-            memberCount: epsu.member_count ?? 0,
-            onlineCount: epsu.online_count ?? 0,
-          };
-          return accumulator;
-        }, {});
-        const normalizedGuestEpsus = nextGuestEpsus.map((epsu) => ({
-          id: epsu.id,
-          slug: epsu.slug,
-          name: epsu.name,
-          code: epsu.code,
-          scope: epsu.scope,
-          website: epsu.website,
-          review_status: epsu.review_status,
-          country_code: epsu.country_code,
-          logo_path: epsu.logo_path,
-        }));
+        const nextGuestEpsus = await fetchGuestEpsus(guestCountryCode ?? null);
+        const nextPopulation = mapGuestPopulation(nextGuestEpsus);
+        const normalizedGuestEpsus = normalizeGuestEpsus(nextGuestEpsus);
         const guestMemberships = normalizedGuestEpsus.map((epsu) => ({
           id: `guest:${epsu.id}`,
           epsuId: epsu.id,
@@ -1107,18 +1265,21 @@ export default function App() {
           status: 'active',
           mutedUntil: null,
         }));
-        const nextPosts = await fetchGuestPosts(normalizedGuestEpsus.map((epsu) => epsu.id));
+        const nextActivePostCountByEpsu = await fetchEpsuActivePostCounts(
+          normalizedGuestEpsus.map((epsu) => epsu.id)
+        ).catch(() => ({}));
 
         if (!isActive) {
           return;
         }
 
-        setCurrentCountryCode(guestCountryCode);
+        setCurrentCountryCode(guestCountryCode ?? null);
         setCurrentHasAcceptedCommunityGuidelines(false);
         setEpsus(normalizedGuestEpsus);
-        setPosts(nextPosts);
+        setPosts([]);
         setReviewedPostIdsByEpsu({});
         setReportedPostIds([]);
+        setRepliedToPostIds([]);
         setModeratedEpsuIds([]);
         setHostedEpsuIds([]);
         setMemberships([]);
@@ -1128,6 +1289,7 @@ export default function App() {
         setQueuedFlaggedPosts([]);
         setBlockedAuthorIds([]);
         setEpsuPopulationById(nextPopulation);
+        setActivePostCountByEpsu(nextActivePostCountByEpsu);
       } finally {
         if (isActive) {
           setIsGuestBootstrapping(false);
@@ -1198,6 +1360,38 @@ export default function App() {
       })
       .catch(() => {});
 
+    AsyncStorage.getItem(PENDING_AUTH_HANDOFF_STORAGE_KEY)
+      .then((storedPayload) => {
+        if (!isActive || !storedPayload) {
+          return;
+        }
+
+        try {
+          const parsedPayload = JSON.parse(storedPayload);
+          if (parsedPayload?.token) {
+            logAuthHandoff('loaded stored pending token on app start', {
+              tokenPrefix: parsedPayload.token.slice(0, 8),
+              purpose: parsedPayload.purpose ?? null,
+            });
+            setPendingAuthHandoff(parsedPayload);
+          }
+        } catch {
+          // ignore malformed legacy payloads
+        }
+      })
+      .catch(() => {});
+
+    AsyncStorage.getItem(PASSWORD_RECOVERY_MODE_STORAGE_KEY)
+      .then((storedValue) => {
+        if (!isActive || storedValue !== 'true') {
+          return;
+        }
+
+        logAuthHandoff('loaded persisted password recovery mode on app start');
+        setPendingRecoveryAfterAuth(true);
+      })
+      .catch(() => {});
+
     return () => {
       isActive = false;
     };
@@ -1238,6 +1432,20 @@ export default function App() {
 
       logModeratorInvite('handleAuthUrl received', { url });
 
+      const authHandoffDetails = getAuthHandoffDetails(url);
+      if (authHandoffDetails?.token) {
+        logAuthHandoff('token extracted from url', {
+          tokenPrefix: authHandoffDetails.token.slice(0, 8),
+          purpose: authHandoffDetails.purpose ?? null,
+        });
+        await storePendingAuthHandoffToken(authHandoffDetails).catch(() => {});
+        setPendingAuthHandoff(authHandoffDetails);
+        if (isAuthenticatedRef.current) {
+          logAuthHandoff('user is already authenticated while receiving handoff token');
+        }
+        return;
+      }
+
       const moderatorInviteToken = getModeratorInviteToken(url);
       if (moderatorInviteToken) {
         logModeratorInvite('token extracted from url', { tokenPrefix: moderatorInviteToken.slice(0, 8) });
@@ -1262,27 +1470,36 @@ export default function App() {
       const code = params.get('code');
       const accessToken = params.get('access_token');
       const refreshToken = params.get('refresh_token');
+      const tokenHash = params.get('token_hash');
+      const otpType = params.get('type');
 
       if (errorDescription) {
+        if (isSignupConfirmUrl && isActive) {
+          setIsCompletingAuthLink(false);
+        }
         showAppDialog(isResetPasswordUrl ? 'Reset password' : 'Email confirmation', errorDescription);
         return;
       }
 
       if (isResetPasswordUrl && isActive) {
+        setPendingRecoveryAfterAuth(true);
         setIsPasswordRecovery(true);
+        await persistPasswordRecoveryMode().catch(() => {});
       }
 
       try {
-        if (isSignupConfirmUrl && isActive) {
-          setIsCompletingAuthLink(true);
-        }
-
         if (code) {
+          if (isSignupConfirmUrl && isActive) {
+            setIsCompletingAuthLink(true);
+          }
           const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) {
             throw error;
           }
         } else if (accessToken && refreshToken) {
+          if (isSignupConfirmUrl && isActive) {
+            setIsCompletingAuthLink(true);
+          }
           const { error } = await supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken,
@@ -1290,7 +1507,21 @@ export default function App() {
           if (error) {
             throw error;
           }
+        } else if (tokenHash && otpType) {
+          if (isSignupConfirmUrl && isActive) {
+            setIsCompletingAuthLink(true);
+          }
+          const { error } = await supabase.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: otpType,
+          });
+          if (error) {
+            throw error;
+          }
         } else {
+          if (isSignupConfirmUrl && isActive) {
+            setIsCompletingAuthLink(false);
+          }
           showAppDialog(
             isResetPasswordUrl ? 'Reset password' : 'Email confirmation',
             isResetPasswordUrl
@@ -1308,7 +1539,9 @@ export default function App() {
         if (isActive) {
           setIsCompletingAuthLink(false);
           if (isResetPasswordUrl) {
+            setPendingRecoveryAfterAuth(false);
             setIsPasswordRecovery(false);
+            await clearPersistedPasswordRecoveryMode().catch(() => {});
           }
         }
         showAppDialog(
@@ -1339,6 +1572,126 @@ export default function App() {
       setIsCompletingAuthLink(false);
     }
   }, [isAuthenticated, isCompletingAuthLink]);
+
+  useEffect(() => {
+    if (!pendingRecoveryAfterAuth || !isAuthenticated) {
+      return;
+    }
+
+    logAuthHandoff('forcing recovery screen after auth state became active');
+    setIsPasswordRecovery(true);
+    setPendingRecoveryAfterAuth(false);
+  }, [pendingRecoveryAfterAuth, isAuthenticated]);
+
+  useEffect(() => {
+    if (!pendingAuthHandoff?.token || isRedeemingAuthHandoffRef.current || !isOnline) {
+      logAuthHandoff('redeem effect skipped', {
+        hasToken: Boolean(pendingAuthHandoff?.token),
+        isRedeemingAuthHandoff: isRedeemingAuthHandoffRef.current,
+        isOnline,
+      });
+      return;
+    }
+
+    let isActive = true;
+
+    const handleAuthHandoff = async () => {
+      const tokenToRedeem = pendingAuthHandoff.token;
+      const deepLinkRecovery = pendingAuthHandoff.purpose === 'password_reset_mobile_recovery';
+      logAuthHandoff('starting auth handoff redemption', {
+        tokenPrefix: tokenToRedeem.slice(0, 8),
+        isAuthenticated: isAuthenticatedRef.current,
+        purpose: pendingAuthHandoff.purpose ?? null,
+      });
+      setIsRedeemingAuthHandoff(true);
+      setIsCompletingAuthLink(true);
+
+      try {
+        const result = await redeemAuthHandoff(tokenToRedeem);
+        logAuthHandoff('redeemAuthHandoff returned', result ?? null);
+
+        if (!result?.ok || !result?.tokenHash || !result?.type) {
+          if (pendingAuthHandoffRef.current?.token === tokenToRedeem) {
+            setPendingAuthHandoff(null);
+          }
+          await clearPendingAuthHandoffToken(tokenToRedeem).catch(() => {});
+          if (!isActive) {
+            return;
+          }
+          setIsCompletingAuthLink(false);
+          showAppDialog('Phone login', result?.message ?? 'This phone login QR could not be used');
+          return;
+        }
+
+        const isRecoveryHandoff =
+          deepLinkRecovery
+          || result.type === 'recovery'
+          || String(result.purpose ?? '').trim() === 'password_reset_mobile_recovery';
+
+        if (isRecoveryHandoff && isActive) {
+          setPendingRecoveryAfterAuth(true);
+          setIsPasswordRecovery(true);
+          await persistPasswordRecoveryMode().catch(() => {});
+        }
+
+        const { error } = await supabase.auth.verifyOtp({
+          token_hash: result.tokenHash,
+          type: result.type,
+        });
+
+        if (error) {
+          throw error;
+        }
+
+        if (!isActive) {
+          if (pendingAuthHandoffRef.current?.token === tokenToRedeem) {
+            setPendingAuthHandoff(null);
+          }
+          await clearPendingAuthHandoffToken(tokenToRedeem).catch(() => {});
+          return;
+        }
+
+        if (isRecoveryHandoff) {
+          setPendingRecoveryAfterAuth(true);
+          setIsPasswordRecovery(true);
+          await persistPasswordRecoveryMode().catch(() => {});
+        }
+
+        setAuthRefreshNonce((current) => current + 1);
+        if (pendingAuthHandoffRef.current?.token === tokenToRedeem) {
+          setPendingAuthHandoff(null);
+        }
+        await clearPendingAuthHandoffToken(tokenToRedeem).catch(() => {});
+      } catch (error) {
+        if (!isActive) {
+          return;
+        }
+
+        logAuthHandoff('redeem flow threw error', error?.message ?? String(error));
+        setIsCompletingAuthLink(false);
+        if (deepLinkRecovery) {
+          setPendingRecoveryAfterAuth(false);
+          setIsPasswordRecovery(false);
+          await clearPersistedPasswordRecoveryMode().catch(() => {});
+        }
+        showAppDialog('Phone login', error?.message ?? 'This phone login QR could not be used');
+        if (/invalid|already used|expired/i.test(error?.message ?? '')) {
+          if (pendingAuthHandoffRef.current?.token === tokenToRedeem) {
+            setPendingAuthHandoff(null);
+          }
+          await clearPendingAuthHandoffToken(tokenToRedeem).catch(() => {});
+        }
+      } finally {
+        setIsRedeemingAuthHandoff(false);
+      }
+    };
+
+    void handleAuthHandoff();
+
+    return () => {
+      isActive = false;
+    };
+  }, [pendingAuthHandoff, isOnline, supabase]);
 
   useEffect(() => {
     if (
@@ -1748,8 +2101,10 @@ export default function App() {
 
     const refreshEpsuDirectory = async () => {
       try {
-        if (isGuestMode && guestCountryCode) {
-          const nextGuestEpsus = await fetchGuestEpsus(guestCountryCode);
+        if (isGuestMode) {
+          const nextGuestEpsus = await fetchGuestEpsus(guestCountryCode ?? null);
+          const normalizedGuestEpsus = normalizeGuestEpsus(nextGuestEpsus);
+          const nextPopulation = mapGuestPopulation(nextGuestEpsus);
           const nextActivePostCountByEpsu = await fetchEpsuActivePostCounts(
             nextGuestEpsus.map((epsu) => epsu.id)
           ).catch(() => ({}));
@@ -1758,7 +2113,8 @@ export default function App() {
             return;
           }
 
-          setEpsus(nextGuestEpsus);
+          setEpsus(normalizedGuestEpsus);
+          setEpsuPopulationById(nextPopulation);
           setActivePostCountByEpsu(nextActivePostCountByEpsu);
           return;
         }
@@ -2261,6 +2617,8 @@ export default function App() {
               onCompletePasswordRecovery={handleCompletePasswordRecovery}
               onDone={async () => {
                 setIsPasswordRecovery(false);
+                setPendingRecoveryAfterAuth(false);
+                await clearPersistedPasswordRecoveryMode().catch(() => {});
                 try {
                   await rawHandleLogout();
                 } catch {
