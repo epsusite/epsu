@@ -2,11 +2,17 @@
 
 ## 1. What This Document Is
 
-This document is the biggest current-state explanation of the Epsu repository. It is not a pitch deck. It is not a vague roadmap. It is not a "what might happen" file. It is a present-tense system bible written from the code, the migrations, the public/legal pages, the store-preparation documents, and the repository structure as they exist in this repo on April 20, 2026.
+This document is the biggest current-state explanation of the Epsu repository. It is not a pitch deck. It is not a vague roadmap. It is not a "what might happen" file. It is a present-tense system bible written from the code, the migrations, the public/legal pages, the store-preparation documents, and the repository structure as they exist in this repo on May 24, 2026.
 
 This file is intentionally direct. It explains what Epsu is, how it is built, what the app actually does, what the backend actually enforces, what the public site actually says, what the store drafts currently claim, and where the repo still contains historical or legacy material.
 
 The phrase "grandplan" here means "single exhaustive explanation of the current system," not "promised future blueprint."
+
+## 1.1 Milestone Note
+
+This repository records `May 30, 2026` as the app's birthday, meaning the day the app first became live.
+
+From the perspective of `May 31, 2026`, yesterday was the app's birthday.
 
 ## 2. Source Set Used
 
@@ -25,18 +31,17 @@ This document is grounded in these repo sources:
   - `PostScreen.js`
   - `ReportScreen.js`
   - `SettingsScreen.js`
-  - `SchoolApplicationScreen.js`
   - `RentEpsuScreen.js`
-  - `RegionalConfirmationScreen.js`
   - `JoinInviteScreen.js`
   - `DeleteEpsuScreen.js`
   - `ModQueueScreen.js`
   - `ModerationRecordsScreen.js`
   - `OwnerToolsScreen.js`
-  - `OwnerMembersScreen.js`
   - `OwnerTeamScreen.js`
   - `OwnerModInviteScreen.js`
   - `OwnerWorstUsersScreen.js`
+  - `GuestModeScreen.js`
+  - `AdminFullhourQueueScreen.js`
   - `AdminScreen.js`
 - Runtime support and domain code:
   - `lib/useAppBootstrap.js`
@@ -71,7 +76,6 @@ This document is grounded in these repo sources:
   - `site/guidelines.html`
   - `site/delete-account.html`
   - `site/system-report.html`
-  - `site/epsu-master-report.html`
   - `site/styles.css`
   - `site/render.yaml`
 - Store submission/support docs:
@@ -99,12 +103,12 @@ The core current product model is:
 - users join or apply to Epsus depending on the community type
 - users submit anonymous posts
 - posts are not published instantly; they are queued for the next UTC full-hour batch
-- each user can submit only one post per Epsu per hourly cycle
+- each user can currently submit up to 2 top-level posts and 1 reply per Epsu per hourly cycle
 - released posts exist for a limited cycle and are then deleted
 - once a user reacts to a post, that post disappears from that user's feed
 - users can report posts
 - users can block anonymous authors from their own feed
-- moderators and owners have scoped governance tools
+- moderators and hosts have scoped governance tools
 - admins have platform review tools
 
 Epsu is not a direct-messaging app, not a public profile app, and not a classic permanent archive forum. The system is built around anonymous public posting with backend accountability and intentionally short-lived feed content.
@@ -418,7 +422,7 @@ The bucket rule currently confirmed for the system is:
 
 Each user can submit:
 
-- one post per Epsu per hourly cycle
+- up to 2 top-level posts and 1 reply per Epsu per hourly cycle
 
 That rule is backend-enforced.
 
@@ -517,7 +521,7 @@ Regional Epsus are geographically bounded communities.
 Current truths:
 
 - visibility is country-scoped in the app
-- membership is limited to one regional Epsu at a time
+- membership is limited to three regional Epsus at a time
 - large regional strategies are not solved by the code itself; they are product/governance choices
 - suggestion and approval machinery exists for regional demand
 
@@ -1043,8 +1047,8 @@ If a user deletes their account:
 
 - the account itself goes away
 - many profile-linked records go away
-- a still-live post does not vanish instantly if its lifecycle is still active
-- instead, the author link is removed and the post survives only until its normal deletion cycle ends
+- authored posts are deleted as part of the backend account-erasure flow
+- moderation actions where the user was the actor or target are also deleted
 - users cannot delete while they still manage an Epsu
 
 That is now consistently reflected in:
@@ -1231,7 +1235,6 @@ Top-level repository items currently include:
 - `LoginScreen.js`
 - `ModerationRecordsScreen.js`
 - `ModQueueScreen.js`
-- `OwnerMembersScreen.js`
 - `OwnerModInviteScreen.js`
 - `OwnerTeamScreen.js`
 - `OwnerToolsScreen.js`
@@ -1240,11 +1243,9 @@ Top-level repository items currently include:
 - `package.json`
 - `PostScreen.js`
 - `README.md`
-- `RegionalConfirmationScreen.js`
 - `RentEpsuScreen.js`
 - `ReportScreen.js`
 - `ResetPasswordScreen.js`
-- `SchoolApplicationScreen.js`
 - `SettingsScreen.js`
 - `SignUpScreen.js`
 - `TECHNICAL_REPORT.md`

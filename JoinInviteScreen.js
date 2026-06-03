@@ -21,6 +21,7 @@ const DEFAULT_REGIONAL_COUNTRY_CODE = 'EE';
 const REGIONAL_SCOPES = ['city', 'state', 'country'];
 const MIN_REGIONAL_TITLE_LENGTH = 2;
 const MAX_REGIONAL_TITLE_LENGTH = 100;
+const MAX_REGIONAL_MEMBERSHIPS = 3;
 
 export default function JoinInviteScreen({
   navigation,
@@ -66,10 +67,10 @@ export default function JoinInviteScreen({
       return;
     }
 
-    if (approvedRegionalMembershipCount >= 1) {
+    if (approvedRegionalMembershipCount >= MAX_REGIONAL_MEMBERSHIPS) {
       showAppDialog(
-        'Maximum regional Epsu limit reached',
-        'You already are a member of maximum amount of regional Epsus. Leave from one in order to create a new Epsu.'
+        'Regional Epsu limit reached',
+        'You are already in the maximum number of regional Epsus. Leave one before creating a new Epsu.'
       );
       return;
     }

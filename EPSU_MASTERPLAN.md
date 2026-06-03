@@ -2,7 +2,7 @@
 
 ## 1. Scope
 
-This masterplan consolidates the non-legal Epsu materials: `TECHNICAL_REPORT.md`, `site/epsu-master-report.html`, `site/system-report.html`, `ANALYTICS_PLAN.md`, `BUSINESS_TODO.md`, and `LAUNCH_CHECKLIST.md`. It excludes legal and policy texts such as terms, privacy, guidelines, and host policy wording. The purpose is to convert the technical reports, launch thinking, analytics plan, and business notes into one execution document.
+This masterplan consolidates the non-legal Epsu materials: `TECHNICAL_REPORT.md`, `site/system-report.html`, `ANALYTICS_PLAN.md`, `BUSINESS_TODO.md`, and `LAUNCH_CHECKLIST.md`. It excludes legal and policy texts such as terms, privacy, guidelines, and host policy wording. `site/epsu-master-report.html` is now treated as a legacy alias page rather than a separate canonical report. The purpose is to convert the technical reports, launch thinking, analytics plan, and business notes into one execution document.
 
 The longest source is `TECHNICAL_REPORT.md`, at 44,219 bytes. The final target is a masterplan above 88,438 bytes. This file is written as a practical operating plan: what Epsu is, how it should work, what must be built, what must be measured, what must be delayed, and how technical work connects to product and business direction.
 
@@ -16,7 +16,7 @@ The product should launch small. A small active school is more valuable than man
 
 ## 3. Current System
 
-The current system is an Expo React Native app backed by Supabase Auth, Postgres, Storage, RPCs, RLS, and an Edge Function for push notifications. The public site is static HTML/CSS. The app contains authentication, home feed, posting, reporting, moderation queue, owner tools, admin review, school applications, notification preferences, account history, account requests, password reset, and account deletion surfaces.
+The current system is an Expo React Native app backed by Supabase Auth, Postgres, Storage, RPCs, RLS, and Edge Functions. The public site is static HTML/CSS. The app contains authentication, home feed, posting, reporting, moderation queue, host tools, admin review, school and regional trial request flows, notification preferences, account history, password reset, and account deletion surfaces.
 
 The backend stores profiles, Epsus, memberships, posts, reactions, reports, moderation actions, invites, suggestions, school applications, notifications, push tokens, presence, subscriptions, and account requests. Sensitive mutations increasingly use backend RPCs. This is the correct direction. The mobile client should request actions; the backend should decide whether those actions are allowed.
 
@@ -50,7 +50,7 @@ The first-use goal is simple: the user understands where they are, sees or creat
 
 Epsu communities should not all behave the same.
 
-Regional Epsus are city, state, country, district, town, or similar place-based communities. They should be easy to join once approved and visible. School Epsus are institution-based and should support application, owner/host review, logo, website, country, and admin approval. Private Epsus exist as a possible later scope but should not be expanded until public and school communities are stable. Suggestions are not full communities; they are demand signals.
+Regional Epsus are city, state, country, district, town, or similar place-based communities. They should be easy to join once approved and visible. School Epsus are institution-based and should support application, host review, logo, website, country, and admin approval. Private Epsus exist as a possible later scope but should not be expanded until public and school communities are stable. Suggestions are not full communities; they are demand signals.
 
 Each type needs different rules:
 
@@ -63,9 +63,9 @@ Each type needs different rules:
 
 ## 7. Identity
 
-Identity has three layers: authentication identity, profile identity, and contextual role. Authentication identity lives in Supabase Auth. Profile identity lives in `profiles`. Contextual role lives in `epsu_memberships`. A user can be ordinary in one Epsu, moderator in another, owner in a school, and platform admin globally.
+Identity has three layers: authentication identity, profile identity, and contextual role. Authentication identity lives in Supabase Auth. Profile identity lives in `profiles`. Contextual role lives in `epsu_memberships`. A user can be ordinary in one Epsu, moderator in another, host in a school, and platform admin globally.
 
-The app must avoid treating local power as global power. A host is not an admin. A moderator is not an owner. An owner is not necessarily a company representative. Admin is a rare platform role. Each role should map to backend checks, not just hidden UI buttons.
+The app must avoid treating local power as global power. A host is not an admin. A moderator is not a host. A host is not necessarily a company representative. Admin is a rare platform role. Each role should map to backend checks, not just hidden UI buttons.
 
 Profile data should remain minimal. Country supports regional membership. Birth date supports age gating. Notification preference supports push and in-app notification behavior. Admin flag supports platform review. Guideline acceptance records onboarding state. Username supports internal profile identity but should not automatically appear on anonymous posts.
 
@@ -113,7 +113,7 @@ Likes and dislikes should not replace reports. Dislike means unpopular or low qu
 
 ## 13. Reports
 
-Reports are formal moderation inputs. A report should include reporter, post, reason, optional explanation, status, and timestamp. Duplicate reports by the same profile on the same post should be prevented. Reports should be visible to moderators and owners scoped to the relevant Epsu.
+Reports are formal moderation inputs. A report should include reporter, post, reason, optional explanation, status, and timestamp. Duplicate reports by the same profile on the same post should be prevented. Reports should be visible to moderators and hosts scoped to the relevant Epsu.
 
 The report flow should be fast. If it feels too heavy, users will not report. Reasons should be limited at launch. Explanations should help but not block every report.
 
@@ -129,7 +129,7 @@ The moderation queue should refresh after actions. If role access changes, the U
 
 ## 15. Owners, Hosts, and Moderators
 
-The database currently uses owner and moderator roles. The business model may later use the term host for paid or temporary school/community control. Product language can evolve, but backend authority must stay precise.
+The current runtime uses host and moderator roles, while some older migrations and docs still contain owner terminology. Product language can evolve, but backend authority must stay precise.
 
 Moderators can resolve reports and mute authors. Owners can manage memberships, applications, moderators, invites, and owned Epsus. Admins can review global pending items. These powers must not bleed into each other.
 
@@ -147,7 +147,7 @@ Admin operations should be logged where they change product state. Reviewing a s
 
 Schools are the best early wedge because they have real shared context. A school Epsu should include name, slug, code, website, country, logo path, review status, owner/host relation, and memberships. School creation should require logo and website at the current product stage because those help admin review and visual trust.
 
-A school should begin pending. Admin approval makes it visible. The creator may get owner status immediately, but broad access should wait for review. Users apply with a short answer. Owners review applications. Kicked users should not reapply through ordinary flows.
+A school should begin pending. Admin approval makes it visible. The creator may get host status immediately, but broad access should wait for review. Users apply with a short answer. Hosts review applications. Kicked users should not reapply through ordinary flows.
 
 The launch should choose schools where at least one person will actually post. A school with no seed user is not a product test.
 
@@ -367,7 +367,7 @@ Do not send post body, report explanation, email, birth date, push token, invite
 Initial Metabase dashboards:
 
 - Global health: users, posts, reports, applications, notifications, active Epsus.
-- Launch cohort: three schools and one regional Epsu tracked daily.
+- Launch cohort: three schools and one pilot regional Epsu tracked daily.
 - Community activity: posts, replies, active members, reports by Epsu.
 - Moderation load: open reports, actions, resolution time, repeat reported authors.
 - School operations: pending schools, applications, approvals, rejections, owner activity.
@@ -378,7 +378,7 @@ Admin dashboards can be broad. Host dashboards must be scoped to the host's Epsu
 
 ## 35. Launch Scope
 
-Soft launch should stay small: three schools and one regional Epsu. Each selected Epsu must have at least one real person ready to post. A launch without seed posts is not a fair product test.
+Soft launch should stay small: three schools and one pilot regional Epsu. Each selected Epsu must have at least one real person ready to post. A launch without seed posts is not a fair product test.
 
 The launch should not include paid hosts, regional ads, broad promotion, third-party ad networks, or complex dashboards. It should test core behavior: do users return to a local anonymous space?
 
@@ -622,7 +622,7 @@ Phase Zero is not about new features. It is about avoiding obvious launch failur
 
 ## 48. Roadmap Phase One
 
-Phase One is controlled soft launch. Launch to three schools and one regional Epsu. Recruit seed users. Watch behavior. Keep issue list. Measure day-one and day-seven retention.
+Phase One is controlled soft launch. Launch to three schools and one pilot regional Epsu. Recruit seed users. Watch behavior. Keep issue list. Measure day-one and day-seven retention.
 
 Work:
 
@@ -1012,7 +1012,7 @@ Growth sequence:
 
 - Prove one school.
 - Add nearby or similar schools.
-- Prove one regional Epsu.
+- Prove one pilot regional Epsu.
 - Add regions with clear demand.
 - Add hosts only where activity exists.
 - Add monetization only where governance works.
@@ -1291,7 +1291,7 @@ Immediate steps:
 - Rotate the exposed Supabase token.
 - Run end-to-end manual tests.
 - Pick three schools.
-- Pick one regional Epsu.
+- Pick one pilot regional Epsu.
 - Identify seed participants.
 - Prepare launch issue list.
 - Prepare daily metrics sheet.
