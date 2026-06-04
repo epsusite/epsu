@@ -36,16 +36,17 @@
         <h2>3. What deletion removes</h2>
         <p class="doc-body">
           Account deletion removes your auth account and profile-linked records, including notifications, reactions,
-          reports filed by you, memberships, suggestions, school applications, subscriptions, push tokens, and account
-          requests.
+          reports filed by you, memberships, suggestions, school applications, subscriptions, push tokens, account
+          requests, and posts authored by your account.
         </p>
       </section>
 
       <section class="doc-section">
         <h2>4. What may remain temporarily</h2>
         <p class="doc-body">
-          Posts you already submitted are not immediately cascaded away with the account. Their author link is removed, and
-          the posts stay only until their normal scheduled deletion cycle ends.
+          Normal infrastructure backups or provider recovery windows may persist temporarily after deletion. This does not
+          mean your live posts remain visible until their normal expiry cycle: under the current backend, your authored
+          posts are deleted as part of the account-deletion flow.
         </p>
       </section>
 
