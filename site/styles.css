@@ -149,7 +149,7 @@ h1 {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  margin-top: 24px;
+  margin-top: 18px;
 }
 
 .primary-button,
@@ -180,6 +180,67 @@ h1 {
   border: 1px solid #f3d0dd;
 }
 
+.store-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.store-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  padding: 12px 18px;
+  border-radius: 18px;
+  background: #20131a;
+  color: #ffffff;
+  text-decoration: none;
+  box-shadow: 0 12px 26px rgba(32, 19, 26, 0.14);
+  transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease;
+}
+
+.store-badge:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 30px rgba(32, 19, 26, 0.18);
+}
+
+.store-icon {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.store-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.store-copy {
+  display: flex;
+  flex-direction: column;
+  line-height: 1;
+}
+
+.store-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  opacity: 0.84;
+  margin-bottom: 5px;
+}
+
+.store-title {
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+}
+
 .primary-button:hover,
 .secondary-button:hover,
 .card:hover,
@@ -189,8 +250,7 @@ h1 {
 }
 
 .panel-label,
-.feature-kicker,
-.swatch-name {
+.feature-kicker {
   margin: 0 0 10px;
   font-size: 12px;
   font-weight: 800;
@@ -241,8 +301,7 @@ h1 {
   font-size: 24px;
 }
 
-.docs-section,
-.palette-section {
+.docs-section {
   margin-top: 34px;
 }
 
@@ -250,22 +309,19 @@ h1 {
   margin-bottom: 18px;
 }
 
-.section-heading h2,
-.palette-header h2 {
+.section-heading h2 {
   font-size: clamp(30px, 6vw, 48px);
   margin-bottom: 12px;
 }
 
-.section-copy,
-.palette-copy {
+.section-copy {
   max-width: 700px;
   margin: 0;
   font-size: 16px;
   line-height: 1.65;
 }
 
-.card-grid,
-.palette-grid {
+.card-grid {
   display: grid;
   gap: 14px;
 }
@@ -289,25 +345,6 @@ h1 {
   margin: 0;
   font-size: 15px;
   line-height: 1.68;
-}
-
-.palette-grid {
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-}
-
-.swatch {
-  width: 100%;
-  height: 60px;
-  border-radius: 14px;
-  border: 1px solid rgba(32, 19, 26, 0.08);
-  margin-bottom: 12px;
-}
-
-.swatch-code {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 900;
-  line-height: 1.12;
 }
 
 .doc {
@@ -395,8 +432,7 @@ h1 {
   .hero-copy,
   .hero-panel-card,
   .feature-card,
-  .card,
-  .swatch-card {
+  .card {
     padding: 20px;
     border-radius: 22px;
   }
@@ -404,5 +440,13 @@ h1 {
   h1 {
     max-width: none;
     font-size: clamp(38px, 13vw, 60px);
+  }
+
+  .store-badges {
+    flex-direction: column;
+  }
+
+  .store-badge {
+    width: 100%;
   }
 }
