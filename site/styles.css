@@ -169,6 +169,57 @@ h1 {
   margin-top: 24px;
 }
 
+.social-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.social-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-width: 170px;
+  min-height: 52px;
+  padding: 0 18px;
+  border-radius: 999px;
+  border: 1px solid #f3d0dd;
+  background: #ffffff;
+  color: #20131a;
+  text-decoration: none;
+  font-size: 16px;
+  font-weight: 800;
+  box-shadow: 0 12px 28px rgba(176, 89, 117, 0.08);
+  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+}
+
+.social-link:hover {
+  transform: translateY(-2px);
+}
+
+.social-link-tiktok:hover {
+  border-color: #20131a;
+}
+
+.social-link-instagram:hover {
+  border-color: #e52b50;
+}
+
+.social-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #fff3f7;
+  color: #20131a;
+  font-size: 18px;
+  line-height: 1;
+}
+
 .store-badge {
   display: inline-flex;
   align-items: center;
@@ -450,6 +501,14 @@ h1 {
   }
 
   .store-badge {
+    width: 100%;
+  }
+
+  .social-links {
+    flex-direction: column;
+  }
+
+  .social-link {
     width: 100%;
   }
 }
