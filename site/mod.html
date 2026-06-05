@@ -5,33 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Epsu Moderator Invite</title>
     <link rel="stylesheet" href="/styles.css" />
-    <style>
-      .invite-actions {
-        display: flex;
-        gap: 12px;
-        flex-wrap: wrap;
-        margin-top: 18px;
-      }
-
-      .invite-button {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-height: 46px;
-        border-radius: 999px;
-        background: #e52b50;
-        color: #fff;
-        font-weight: 800;
-        text-decoration: none;
-        padding: 0 18px;
-      }
-
-      .invite-button.secondary {
-        background: #fff;
-        color: #e52b50;
-        border: 1px solid #f1b6c2;
-      }
-    </style>
   </head>
   <body>
     <main class="page doc">
@@ -43,9 +16,9 @@
       <section class="doc-section">
         <h2>Invite link</h2>
         <p id="invite-link" class="doc-body"></p>
-        <div class="invite-actions">
-          <a id="open-app" class="invite-button" href="/">Open in Epsu</a>
-          <a id="copy-link" class="invite-button secondary" href="/">Copy invite link</a>
+        <div class="status-actions">
+          <a id="open-app" class="button-link" href="/">Open in Epsu</a>
+          <a id="copy-link" class="button-ghost" href="/">Copy invite link</a>
         </div>
       </section>
       <a class="back-link" href="/">Back to Epsu</a>
