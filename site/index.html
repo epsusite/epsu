@@ -177,6 +177,50 @@
         </div>
       </section>
 
+      <section class="contact-section" aria-labelledby="contact-us-heading">
+        <div class="section-heading">
+          <p class="eyebrow">Contact Us</p>
+          <h2 id="contact-us-heading">Send a message to Epsu</h2>
+          <p class="section-copy">
+            Questions, support requests, or feedback. Messages from this form should be routed to
+            <a href="mailto:epsu.site@protonmail.com">epsu.site@protonmail.com</a>.
+          </p>
+        </div>
+
+        <div class="contact-shell">
+          <form class="contact-form" action="https://api.web3forms.com/submit" method="POST">
+            <input type="hidden" name="access_key" value="56c793d1-34c8-44cb-be9a-15c6945f8794" />
+            <input type="hidden" name="subject" value="Epsu website contact form" />
+            <input type="hidden" name="from_name" value="Epsu site contact form" />
+            <input type="checkbox" name="botcheck" class="contact-botcheck" tabindex="-1" autocomplete="off" />
+
+            <label class="contact-field">
+              <span>Your email</span>
+              <input type="email" name="email" placeholder="you@example.com" required />
+            </label>
+
+            <label class="contact-field">
+              <span>Title</span>
+              <input type="text" name="title" placeholder="What is this about?" required />
+            </label>
+
+            <label class="contact-field">
+              <span>Message</span>
+              <textarea name="message" rows="6" placeholder="Write your message here" required></textarea>
+            </label>
+
+            <button class="primary-button contact-submit" type="submit">Send message</button>
+          </form>
+
+          <div class="contact-note">
+            <p class="contact-note-title">Direct email contact</p>
+            <p>
+              If you prefer, you can also email <a href="mailto:epsu.site@protonmail.com">epsu.site@protonmail.com</a>.
+            </p>
+          </div>
+        </div>
+      </section>
+
       <section class="mascot-section" aria-label="Epsu mascot">
         <img class="mascot-image" src="/media/1000133182.png" alt="Epsu mascot" />
       </section>
