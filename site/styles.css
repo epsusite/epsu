@@ -207,17 +207,12 @@ h1 {
   border-color: #e52b50;
 }
 
-.social-icon {
+.social-icon-image {
   display: inline-flex;
-  align-items: center;
-  justify-content: center;
   width: 30px;
   height: 30px;
-  border-radius: 50%;
-  background: #fff3f7;
-  color: #20131a;
-  font-size: 18px;
-  line-height: 1;
+  object-fit: contain;
+  flex: 0 0 30px;
 }
 
 .store-badge {
