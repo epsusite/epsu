@@ -57,6 +57,10 @@ a {
   padding: 34px 20px 64px;
 }
 
+.home-page .page {
+  padding-bottom: 0;
+}
+
 .hero {
   display: grid;
   grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
@@ -336,7 +340,7 @@ h1 {
 
 .mascot-section {
   width: 100%;
-  margin: 52px 0 0;
+  margin: 8px 0 0;
   display: flex;
   justify-content: center;
   align-items: flex-end;
@@ -347,6 +351,7 @@ h1 {
   display: block;
   width: min(100%, 600px);
   height: auto;
+  margin-bottom: 0;
 }
 
 .doc {
