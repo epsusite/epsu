@@ -171,6 +171,7 @@ h1 {
 .store-badges {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 12px;
   margin-top: 24px;
 }
@@ -214,7 +215,7 @@ h1 {
 }
 
 .social-icon-image {
-  display: inline-flex;
+  display: block;
   width: 30px;
   height: 30px;
   object-fit: contain;
