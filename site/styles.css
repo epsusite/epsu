@@ -190,55 +190,28 @@ h1 {
 .store-badge {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
-  min-height: 64px;
-  padding: 12px 18px;
-  border-radius: 18px;
-  background: #20131a;
-  color: #ffffff;
+  justify-content: center;
   text-decoration: none;
-  box-shadow: 0 12px 26px rgba(32, 19, 26, 0.14);
-  transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease;
+  transition: transform 140ms ease, filter 140ms ease;
 }
 
 .store-badge:hover {
   transform: translateY(-2px);
-  box-shadow: 0 16px 30px rgba(32, 19, 26, 0.18);
+  filter: brightness(1.02);
 }
 
-.store-icon {
-  width: 28px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-}
-
-.store-icon svg {
-  width: 100%;
-  height: 100%;
+.store-badge-image {
   display: block;
+  height: auto;
+  border: 0;
 }
 
-.store-copy {
-  display: flex;
-  flex-direction: column;
-  line-height: 1;
+.apple-badge {
+  width: 180px;
 }
 
-.store-eyebrow {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  opacity: 0.84;
-  margin-bottom: 5px;
-}
-
-.store-title {
-  font-size: 22px;
-  font-weight: 900;
-  letter-spacing: -0.03em;
+.play-badge {
+  width: 202px;
 }
 
 .primary-button:hover,
