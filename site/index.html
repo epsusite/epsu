@@ -4,42 +4,114 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Epsu</title>
+    <meta
+      name="description"
+      content="Epsu is an anonymous local community app for schools and cities, with public privacy, moderation, and account-deletion documentation."
+    />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
+    <header class="site-header">
+      <div class="header-inner">
+        <a class="brandmark" href="/">Epsu</a>
+        <nav class="header-nav" aria-label="Legal and support links">
+          <a href="/terms">Terms</a>
+          <a href="/guidelines">Guidelines</a>
+          <a href="/privacy">Privacy</a>
+          <a href="/delete-account">Delete account</a>
+          <a href="/system-report.html">System report</a>
+        </nav>
+      </div>
+    </header>
+
     <main class="page">
       <section class="hero">
-        <p class="eyebrow">Local communities</p>
-        <h1>Epsu</h1>
-        <p class="lede">
-          Place-based anonymous communities with rating, moderation, and private ownership tools.
-        </p>
+        <div class="hero-copy">
+          <p class="eyebrow">Anonymous local communities</p>
+          <h1>Your school and city, minus the names.</h1>
+          <p class="lede">
+            Epsu is built for local talk inside real communities. Posts stay identity-hidden to ordinary users, while
+            moderation, privacy, and deletion rules stay public.
+          </p>
+          <div class="hero-actions">
+            <a class="primary-button" href="/privacy">Read privacy policy</a>
+            <a class="secondary-button" href="/guidelines">See community rules</a>
+          </div>
+        </div>
+
+        <aside class="hero-panel">
+          <div class="hero-panel-card">
+            <p class="panel-label">What Epsu is</p>
+            <ul class="signal-list">
+              <li>Anonymous posting for school and city communities</li>
+              <li>Public legal and support pages for trust and app review</li>
+              <li>Built-in moderation and account deletion flows</li>
+            </ul>
+          </div>
+        </aside>
       </section>
 
-      <section class="card-grid">
-        <a class="card" href="/terms">
-          <h2>Terms of service</h2>
-          <p>Core rules for using the app and its communities.</p>
-        </a>
-        <a class="card" href="/guidelines">
-          <h2>Community guidelines</h2>
-          <p>Product rules and community expectations.</p>
-        </a>
-        <a class="card" href="/privacy">
-          <h2>Data use and privacy</h2>
-          <p>How Epsu handles account, post, and moderation data.</p>
-        </a>
-        <a class="card" href="/delete-account">
-          <h2>Account deletion</h2>
-          <p>How to delete your account and what data is removed.</p>
-        </a>
+      <section class="feature-strip" aria-label="Core product pillars">
+        <article class="feature-card">
+          <p class="feature-kicker">Identity-hidden</p>
+          <h2>Users do not see who posted.</h2>
+          <p>Anonymous to ordinary users, with backend accountability for moderation, safety, and deletion.</p>
+        </article>
+        <article class="feature-card">
+          <p class="feature-kicker">Place-based</p>
+          <h2>Built around schools and regions.</h2>
+          <p>Communities are tied to real institutions and locations instead of one giant generic feed.</p>
+        </article>
+        <article class="feature-card">
+          <p class="feature-kicker">Operational</p>
+          <h2>Policies are not hidden.</h2>
+          <p>Privacy, guidelines, deletion, and system behavior are documented publicly on this site.</p>
+        </article>
+      </section>
+
+      <section class="docs-section">
+        <div class="section-heading">
+          <p class="eyebrow">Documentation</p>
+          <h2>Legal, privacy, and support documents</h2>
+          <p class="section-copy">
+            These are the public pages tied to how Epsu works. They belong in the main header because they are part of
+            the product surface, not an afterthought.
+          </p>
+        </div>
+
+        <div class="card-grid">
+          <a class="card" href="/terms">
+            <h3>Terms of service</h3>
+            <p>Eligibility, content rights, moderation authority, account termination, and legal use of the service.</p>
+          </a>
+          <a class="card" href="/guidelines">
+            <h3>Community guidelines</h3>
+            <p>What is allowed, what gets removed, and how safety enforcement works inside Epsu communities.</p>
+          </a>
+          <a class="card" href="/privacy">
+            <h3>Privacy policy</h3>
+            <p>What data exists, how anonymous posting works, and how account deletion and rights requests are handled.</p>
+          </a>
+          <a class="card" href="/delete-account">
+            <h3>Account deletion</h3>
+            <p>The exact deletion path, fallback contact method, and what records are removed from the system.</p>
+          </a>
+          <a class="card" href="/auth-confirm.html">
+            <h3>Email confirmation</h3>
+            <p>Web handoff page for confirmation links that need to open the Epsu app and complete account setup.</p>
+          </a>
+          <a class="card" href="/reset-password.html">
+            <h3>Password reset</h3>
+            <p>Web handoff page for reset links that route users back into the app to finish password recovery.</p>
+          </a>
+        </div>
       </section>
 
       <section class="palette-section" aria-labelledby="palette-title">
-        <div class="palette-header">
+        <div class="section-heading">
           <p class="eyebrow">App Palette</p>
           <h2 id="palette-title">Colors pulled from the actual app</h2>
-          <p class="palette-copy">
+          <p class="section-copy">
             Each code below is rendered in its own color so we can choose the website direction from the real Epsu
             palette instead of inventing new tones.
           </p>
@@ -110,4 +182,4 @@
       </section>
     </main>
   </body>
-  </html>
+</html>
